@@ -1,0 +1,12 @@
+node_modules/
+build/
+coverage/
+coverage.json
+.coverage_artifacts
+.coverage_contracts
+project.secret.js
+cache/
+artifacts/
+.openzeppelin/
+.env
+types/
