@@ -1,6 +1,6 @@
 {
-  "name": "hardhat-template",
-  "version": "1.0.0",
+  "name": "paygasx",
+  "version": "0.1.0",
   "license": "MIT",
   "scripts": {
     "test": "hardhat test",

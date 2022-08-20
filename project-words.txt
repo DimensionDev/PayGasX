@@ -18,6 +18,8 @@ kardia
 mixedcase
 moonriver
 nomiclabs
+paygasx
+prefund
 prettierignore
 reentrancy
 snakecase
