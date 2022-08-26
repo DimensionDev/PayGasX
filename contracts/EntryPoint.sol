@@ -7,6 +7,7 @@ import "./interface/IPaymaster.sol";
 import "./interface/ICreate2Deployer.sol";
 import "./StakeManager.sol";
 import "./lib/UserOperation.sol";
+import "hardhat/console.sol";
 
 /**
  ** Account-Abstraction (EIP-4337) singleton EntryPoint implementation.
@@ -223,8 +224,8 @@ contract EntryPoint is StakeManager {
         bytes32 requestId = getRequestId(userOp);
         (prefund, , ) = _validatePrepayment(0, userOp, requestId);
         preOpGas = preGas - gasleft() + userOp.preVerificationGas;
-
-        require(msg.sender == address(0), "must be called off-chain with from=zero-addr");
+        // FIXME: ethers cannot override from to addressZero
+        // require(msg.sender == address(0), "must be called off-chain with from=zero-addr");
     }
 
     function _getPaymentInfo(UserOperation calldata userOp)
@@ -385,7 +386,6 @@ contract EntryPoint is StakeManager {
         // (used only by off-chain simulateValidation)
         uint256 marker = block.number;
         (marker);
-
         if (paymentMode == PaymentMode.paymasterDeposit) {
             (context) = _validatePaymasterPrepayment(
                 opIndex,
