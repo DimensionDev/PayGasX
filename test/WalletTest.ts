@@ -4,7 +4,8 @@ import chaiAsPromised from "chai-as-promised";
 import { BigNumber, constants, Contract, Signer, utils } from "ethers";
 import { ethers, waffle } from "hardhat";
 import EntryPointArtifact from "../artifacts/contracts/EntryPoint.sol/EntryPoint.json";
-import SimpleWalletArtifact from "../artifacts/contracts/SimpleWallet.sol/SimpleWallet.json";
+import WalletProxyArtifact from "../artifacts/contracts/proxy/WalletProxy.sol/WalletProxy.json";
+import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
 import { UserOperation } from "./entity/userOperation";
 import { signUserOp } from "./utils/UserOp";
 const { expect } = use(chaiAsPromised);
@@ -22,10 +23,10 @@ describe("Wallet testing", () => {
   // let testCreate2FactoryAddress = "0x9C410A51Be344D1C0bFF9dD2F9b7b7401f3029f5";
 
   let entryPoint: Contract;
-  let simpleWallet: Contract;
+  let walletProxy: Contract;
   let singletonFactory;
-  let simpleWalletAddress: string;
-  let simpleWalletInitCode: utils.BytesLike;
+  let walletProxyAddress: string;
+  let walletProxyInitCode: utils.BytesLike;
 
   let chainId;
 
@@ -38,6 +39,8 @@ describe("Wallet testing", () => {
     // chainId = network.config.chainId;
     chainId = 0;
 
+    const SimpleWalletFactory = await ethers.getContractFactory("SimpleWalletUpgradeable");
+    let simpleWallet = await SimpleWalletFactory.deploy();
     const SingletonFactory = await ethers.getContractFactory("SingletonFactory");
     singletonFactory = await SingletonFactory.deploy();
     entryPoint = await deployContract(userSigner, EntryPointArtifact, [singletonFactory.address, 10, 10], {});
@@ -45,22 +48,25 @@ describe("Wallet testing", () => {
     // utils.hexZeroPad(utils.hexlify(salt), 32) doesn't return the correct bytes32 salt
     // saltValue = utils.hexZeroPad(utils.hexlify(salt), 32);
     saltValue = "0x0000000000000000000000000000000000000000000000000000000000000000";
-    const WalletFactory = await ethers.getContractFactory("SimpleWallet");
-    simpleWalletInitCode = WalletFactory.getDeployTransaction(entryPoint.address, userAddress).data!;
+    const WalletProxyFactory = await ethers.getContractFactory("WalletProxy");
+    const simpleWalletInterface = new utils.Interface(SimpleWalletArtifact.abi);
+    const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPoint.address, userAddress]);
+    // WalletProxy constructor
+    walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
 
     let walletAddress = utils.getCreate2Address(
       singletonFactory.address,
       saltValue,
-      utils.keccak256(simpleWalletInitCode),
+      utils.keccak256(walletProxyInitCode),
     );
     console.log("predict wallet addr: ", walletAddress);
-    simpleWalletAddress = walletAddress;
+    walletProxyAddress = walletAddress;
+    walletProxy = new ethers.Contract(walletProxyAddress, SimpleWalletArtifact.abi, userSigner);
   });
 
-  it("test send tx", async () => {
-    console.log("\n\ntest start");
+  it("test simulation", async () => {
     let userOperation: UserOperation = new UserOperation();
-    userOperation.sender = simpleWalletAddress;
+    userOperation.sender = walletProxyAddress;
     let gasFee = {
       Max: BigNumber.from(2e9),
       MaxPriority: BigNumber.from(1e9),
@@ -73,20 +79,20 @@ describe("Wallet testing", () => {
     await userOperation.estimateGas(ethers.provider);
 
     // deploy wallet, check if wallet address match
-    await singletonFactory.deploy(simpleWalletInitCode, saltValue);
+    await singletonFactory.deploy(walletProxyInitCode, saltValue);
     let eventFilter = singletonFactory.filters.Deployed();
     let events = await singletonFactory.queryFilter(eventFilter);
-    console.log("singletonFactory: ", singletonFactory.address, events[0].args);
+    // console.log("singletonFactory: ", singletonFactory.address, events[0].args);
+    expect(events[0].args[0]).to.equal(walletProxyAddress);
 
-    console.log("\n", (await ethers.provider.getCode(simpleWalletAddress)) === "0x");
-    if ((await ethers.provider.getCode(simpleWalletAddress)) === "0x") {
-      userOperation.initCode = simpleWalletInitCode;
+    expect((await ethers.provider.getCode(walletProxyAddress)) == "0x").to.be.false;
+    // console.log("\nShould return false here:", (await ethers.provider.getCode(walletProxyAddress)) === "0x");
+    if ((await ethers.provider.getCode(walletProxyAddress)) === "0x") {
+      userOperation.initCode = walletProxyInitCode;
       userOperation.nonce = 0;
     } else {
-      const _simpleWalletABI = SimpleWalletArtifact.abi;
-      simpleWallet = new ethers.Contract(simpleWalletAddress, _simpleWalletABI, userSigner);
-      await simpleWallet.addDeposit({ value: utils.parseUnits("1", "ether") });
-      userOperation.nonce = parseInt(await simpleWallet.nonce(), 10);
+      await walletProxy.addDeposit({ value: utils.parseUnits("1", "ether") });
+      userOperation.nonce = parseInt(await walletProxy.nonce(), 10);
     }
     //transfer ether from simpleWallet for test
     let walletInterface = new utils.Interface(SimpleWalletArtifact.abi);
@@ -96,11 +102,22 @@ describe("Wallet testing", () => {
       "0x",
     ]);
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-    // console.log(userOperation);
     // FIXME: hardhat chainId 0 error
     const result = await entryPoint.callStatic.simulateValidation(userOperation);
     console.log(`simulateValidation result:`, result);
 
+    // chainId = network.config.chainId;
+    // chainId = 0;
+    // userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+    // console.log(userOperation);
+    // console.log("test chain id: ", chainId);
     // await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+  });
+
+  it("test upgradeability", async () => {
+    const SimpleWalletFactory = await ethers.getContractFactory("SimpleWalletUpgradeable");
+    let simpleWallet = await SimpleWalletFactory.deploy();
+    walletProxy = new ethers.Contract(walletProxyAddress, WalletProxyArtifact.abi, userSigner);
+    await walletProxy.upgradeToAndCall(simpleWallet.address, "0x", false);
   });
 });
