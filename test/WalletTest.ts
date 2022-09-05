@@ -6,6 +6,7 @@ import EntryPointArtifact from "../artifacts/contracts/EntryPoint.sol/EntryPoint
 import WalletProxyArtifact from "../artifacts/contracts/proxy/WalletProxy.sol/WalletProxy.json";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
 import { UserOperation } from "./entity/userOperation";
+import { AddressZero } from "./utils/const";
 import { signUserOp } from "./utils/UserOp";
 const { expect } = use(chaiAsPromised);
 const { deployContract } = waffle;
@@ -72,9 +73,7 @@ describe("Wallet testing", () => {
     userOperation.maxFeePerGas = gasFee.Max;
     userOperation.maxPriorityFeePerGas = gasFee.MaxPriority;
     userOperation.paymaster = constants.AddressZero;
-    // FIXME: causes error if wallet is deployed, call from non-entryPoint contract
-    // potential fix: deploy wallet after estimateGas
-    await userOperation.estimateGas(ethers.provider);
+    await userOperation.estimateGas(ethers.provider, entryPoint.address);
 
     // deploy wallet, check if wallet address match
     await singletonFactory.deploy(walletProxyInitCode, saltValue);
@@ -102,8 +101,7 @@ describe("Wallet testing", () => {
       "0x",
     ]);
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-    // FIXME: hardhat chainId 0 error
-    const result = await entryPoint.callStatic.simulateValidation(userOperation);
+    const result = await entryPoint.connect(AddressZero).callStatic.simulateValidation(userOperation);
     console.log(`simulateValidation result:`, result);
 
     // chainId = network.config.chainId;

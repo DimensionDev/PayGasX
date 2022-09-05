@@ -221,8 +221,7 @@ contract EntryPoint is StakeManager {
         bytes32 requestId = getRequestId(userOp);
         (prefund, , ) = _validatePrepayment(0, userOp, requestId);
         preOpGas = preGas - gasleft() + userOp.preVerificationGas;
-        // FIXME: ethers cannot override from to addressZero
-        // require(msg.sender == address(0), "must be called off-chain with from=zero-addr");
+        require(msg.sender == address(0), "must be called off-chain with from=zero-addr");
     }
 
     function _getPaymentInfo(UserOperation calldata userOp)
