@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract WalletProxy is ERC1967Proxy {
     modifier onlyOwner() {
-        require(msg.sender == _getAdmin());
+        require(msg.sender == _getAdmin() || msg.sender == address(this), "only owner");
         _;
     }
 

@@ -47,7 +47,7 @@ describe("Wallet testing", () => {
 
     const WalletProxyFactory = await ethers.getContractFactory("WalletProxy");
     const simpleWalletInterface = new utils.Interface(SimpleWalletArtifact.abi);
-    const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPoint.address, userAddress]);
+    const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPoint.address]);
     // WalletProxy constructor
     walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
     saltValue = utils.hexZeroPad(userAddress, 32);
