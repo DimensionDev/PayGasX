@@ -34,7 +34,7 @@ We hope to give user an entirely gas-free procedure, thus, we have a `verifying 
 
 ![preparation](preparation.png)
 
-`Verifying paymaster` could sponsor transaction for qualified users. This paymaster will be used in two operations: `approve()` and `addDeposit()`. These two operation should be done in advance (especially for first-time user). Here, we must pay attention to the abuse of our verifying paymaster since we sponsor users for free even though our users are qualified. Our solution is to parse `calldata` in `UserOperation` to ensure it calls the right contract and right function.
+`Verifying paymaster` could sponsor transaction for qualified users. This paymaster will be used in two operations: `approve()` and `addDeposit()`. These two operation should be done in advance (especially for first-time user). Here, we must pay attention to the abuse of our verifying paymaster even though our users are qualified since we sponsor users for free. Our solution is to parse `callData` in `UserOperation` to ensure it calls the right contract and right function. Check [data structure of `UserOperation.callData`]
 
 ### Execution Stage
 
