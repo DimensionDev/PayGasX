@@ -1,5 +1,5 @@
 import "./aa.init";
-import { ethers } from "hardhat";
+import { ethers, waffle } from "hardhat";
 import { expect } from "chai";
 import {
   SimpleWallet,
@@ -16,9 +16,22 @@ import {
 } from "../types";
 //const { deployContract } = waffle;
 
-import { AddressZero, createAddress, createWalletOwner, deployEntryPoint, FIVE_ETH, ONE_ETH } from "./testutils";
+import {
+  AddressZero,
+  createAddress,
+  createWalletOwner,
+  deployEntryPoint,
+  FIVE_ETH,
+  ONE_ETH,
+  TWO_ETH,
+} from "./testutils";
 import { fillAndSign } from "./UserOp";
 import { hexZeroPad, parseEther } from "ethers/lib/utils";
+import { Signer, utils } from "ethers";
+import { creationParams } from "./constants";
+import RedpacketArtifact from "../artifacts/contracts/test/RedPacket.sol/HappyRedPacket.json";
+
+const { deployContract } = waffle;
 
 describe("DepositPaymaster", () => {
   let entryPoint: EntryPoint;
@@ -165,16 +178,12 @@ describe("DepositPaymaster", () => {
     const walletOwner = createWalletOwner();
     let counter: TestCounter;
     let callData: string;
-    let callData2: string;
     before(async () => {
       wallet = await new SimpleWallet__factory(ethersSigner).deploy(entryPoint.address, walletOwner.address);
       counter = await new TestCounter__factory(ethersSigner).deploy();
       const counterJustEmit = await counter.populateTransaction.justemit().then((tx) => tx.data!);
       callData = await wallet.populateTransaction
         .execFromEntryPoint(counter.address, 0, counterJustEmit)
-        .then((tx) => tx.data!);
-      callData2 = await wallet.populateTransaction
-        .execFromEntryPoint(counter.address, 1, counterJustEmit)
         .then((tx) => tx.data!);
 
       await paymaster.addDepositFor(wallet.address, ONE_ETH);
@@ -250,6 +259,109 @@ describe("DepositPaymaster", () => {
       const targetLogs = await counter.queryFilter(counter.filters.CalledFrom());
       expect(targetLogs.length).to.eq(1);
       console.log("after balance", await maskToken.balanceOf(wallet.address));
+    });
+  });
+
+  describe("#create a RedPacket", () => {
+    let wallet: SimpleWallet;
+    let redpacket: HappyRedPacket;
+    const walletOwner = createWalletOwner();
+    let callData: string;
+
+    before(async () => {
+      wallet = await new SimpleWallet__factory(ethersSigner).deploy(entryPoint.address, walletOwner.address);
+      redpacket = await new HappyRedPacket__factory(ethersSigner).deploy();
+      const initialTokens = parseEther("3");
+      await maskToken.mint(wallet.address, initialTokens);
+      const create_red_packet = await redpacket.populateTransaction
+        .create_red_packet(
+          wallet.address,
+          creationParams.number,
+          creationParams.ifrandom,
+          creationParams.duration,
+          creationParams.seed,
+          creationParams.message,
+          creationParams.name,
+          1,
+          maskToken.address,
+          creationParams.totalTokens,
+        )
+        .then((tx) => tx.data!);
+
+      callData = await wallet.populateTransaction
+        .execFromEntryPoint(redpacket.address, 0, create_red_packet)
+        .then((tx) => tx.data!);
+
+      await paymaster.addDepositFor(wallet.address, TWO_ETH);
+    });
+
+    it("should pay with tokens to create redpacket", async () => {
+      const beneficiary = createAddress();
+      const beneficiary1 = createAddress();
+
+      console.log("before balance", await maskToken.balanceOf(wallet.address));
+
+      // need to "approve" the paymaster to use the tokens. we issue a UserOp for that (which uses the deposit to execute)
+      const tokenApprovePaymaster = await maskToken.populateTransaction
+        .approve(paymaster.address, ethers.constants.MaxUint256)
+        .then((tx) => tx.data!);
+      const execApprovePaymaster = await wallet.populateTransaction
+        .execFromEntryPoint(maskToken.address, 0, tokenApprovePaymaster)
+        .then((tx) => tx.data!);
+
+      let userOp1 = await fillAndSign(
+        {
+          sender: wallet.address,
+          paymaster: paymaster.address,
+          paymasterData: hexZeroPad(maskToken.address, 32),
+          callData: execApprovePaymaster,
+        },
+        walletOwner,
+        entryPoint,
+      );
+      await entryPoint.handleOps([userOp1], beneficiary1);
+
+      //approve to redpacket contract to use maskToken
+      const tokenApproveRedpacket = await maskToken.populateTransaction
+        .approve(redpacket.address, ethers.constants.MaxUint256)
+        .then((tx) => tx.data!);
+      const execApproveRedpacket = await wallet.populateTransaction
+        .execFromEntryPoint(maskToken.address, 0, tokenApproveRedpacket)
+        .then((tx) => tx.data!);
+
+      let userOp2 = await fillAndSign(
+        {
+          sender: wallet.address,
+          paymaster: paymaster.address,
+          paymasterData: hexZeroPad(maskToken.address, 32),
+          callData: execApproveRedpacket,
+        },
+        walletOwner,
+        entryPoint,
+      );
+      await entryPoint.handleOps([userOp2], beneficiary1);
+
+      const userOp = await fillAndSign(
+        {
+          sender: wallet.address,
+          paymaster: paymaster.address,
+          paymasterData: hexZeroPad(maskToken.address, 32),
+          callData,
+        },
+        walletOwner,
+        entryPoint,
+      );
+
+      await entryPoint.handleOps([userOp], beneficiary);
+      const createSuccess = (await redpacket.queryFilter(redpacket.filters.CreationSuccess()))[0];
+      const results = createSuccess.args;
+      expect(results).to.have.property("total").that.to.be.eq(creationParams.totalTokens.toString());
+      expect(results).to.have.property("name").that.to.be.eq(creationParams.name);
+      expect(results).to.have.property("message").that.to.be.eq(creationParams.message);
+      expect(results).to.have.property("creator").that.to.be.eq(wallet.address);
+      expect(results).to.have.property("creation_time");
+      const creationTime = results.creation_time.toString();
+      expect(creationTime).to.have.lengthOf(10);
     });
   });
 });
