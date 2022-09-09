@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./BasePaymaster.sol";
 import "hardhat/console.sol";
+import "./lib/UserOperation.sol";
 
 /*
  * clone from https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/samples/DepositPaymaster.sol
@@ -107,12 +108,17 @@ contract DepositPaymaster is BasePaymaster {
      * @return requiredTokens the amount of tokens required to get this amount of eth
      */
     function getTokenValueOfEth(uint256 ethBought) internal view virtual returns (uint256 requiredTokens) {
-        //console.log("ratio is : %s", PAYTOKEN_TO_ETH_RATIO);
         return ethBought * PAYTOKEN_TO_ETH_RATIO;
     }
 
     function setMaskToEthRadio(uint256 radio) public onlyOwner {
         PAYTOKEN_TO_ETH_RATIO = radio;
+    }
+
+    function estimateCost(UserOperation calldata userOp) public view returns (uint256 amount) {
+        uint256 requiredPrefund = userOp.requiredPreFund();
+        console.log("estimate Cost: %s", requiredPrefund);
+        return requiredPrefund;
     }
 
     /**
@@ -128,13 +134,12 @@ contract DepositPaymaster is BasePaymaster {
     ) external view override returns (bytes memory context) {
         (requestId);
 
-        //console.log("maxCost: %s", maxCost);
         // verificationGas is dual-purposed, as gas limit for postOp. make sure it is high enough
         require(userOp.verificationGas > COST_OF_POST, "DepositPaymaster: gas too low for postOp");
 
         require(userOp.paymasterData.length == 32, "DepositPaymaster: paymasterData must specify token");
         address account = userOp.getSender();
-        //console.log("the balance of account: %s", balances[account]);
+
         uint256 maxTokenCost = getTokenValueOfEth(maxCost);
         require(unlockBlock[account] == 0, "DepositPaymaster: deposit not locked");
         require(balances[account] >= maxTokenCost, "DepositPaymaster: deposit too low");
@@ -153,6 +158,7 @@ contract DepositPaymaster is BasePaymaster {
         bytes calldata context,
         uint256 actualGasCost
     ) internal override {
+        console.log("mode %s actual Cost: %s", uint256(mode), actualGasCost);
         (address account, uint256 maxTokenCost, uint256 maxCost) = abi.decode(context, (address, uint256, uint256));
         //use same conversion rate as used for validation.
         uint256 actualTokenCost = ((actualGasCost + COST_OF_POST) * maxTokenCost) / maxCost;
@@ -164,6 +170,7 @@ contract DepositPaymaster is BasePaymaster {
             //in case above transferFrom failed, pay with deposit:
             balances[account] -= actualTokenCost;
         }
+        console.log("account balance: %s", balances[account]);
         balances[owner()] += actualTokenCost;
     }
 }

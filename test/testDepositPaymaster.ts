@@ -29,7 +29,8 @@ import { fillAndSign } from "./UserOp";
 import { hexZeroPad, parseEther } from "ethers/lib/utils";
 import { Signer, utils } from "ethers";
 import { creationParams } from "./constants";
-import RedpacketArtifact from "../artifacts/contracts/test/RedPacket.sol/HappyRedPacket.json";
+import { uint256 } from "./solidityTypes";
+//import RedpacketArtifact from "../artifacts/contracts/test/RedPacket.sol/HappyRedPacket.json";
 
 const { deployContract } = waffle;
 
@@ -39,7 +40,7 @@ describe("DepositPaymaster", () => {
   const ethersSigner = ethers.provider.getSigner();
   let maskToken: MaskToken;
   let paymaster: DepositPaymaster;
-  let redpacket: HappyRedPacket;
+  //let redpacket: HappyRedPacket;
 
   before(async function () {
     entryPoint = await deployEntryPoint(1, 1);
@@ -215,7 +216,7 @@ describe("DepositPaymaster", () => {
       const initialTokens = parseEther("1");
       await maskToken.mint(wallet.address, initialTokens);
       await paymaster.setMaskToEthRadio(2000);
-      console.log("before balance", await maskToken.balanceOf(wallet.address));
+      //console.log("before balance", await maskToken.balanceOf(wallet.address));
 
       // need to "approve" the paymaster to use the tokens. we issue a UserOp for that (which uses the deposit to execute)
       const tokenApprovePaymaster = await maskToken.populateTransaction
@@ -262,7 +263,7 @@ describe("DepositPaymaster", () => {
     });
   });
 
-  describe("#create a RedPacket", () => {
+  describe.only("#create a RedPacket", () => {
     let wallet: SimpleWallet;
     let redpacket: HappyRedPacket;
     const walletOwner = createWalletOwner();
@@ -273,24 +274,6 @@ describe("DepositPaymaster", () => {
       redpacket = await new HappyRedPacket__factory(ethersSigner).deploy();
       const initialTokens = parseEther("3");
       await maskToken.mint(wallet.address, initialTokens);
-      const create_red_packet = await redpacket.populateTransaction
-        .create_red_packet(
-          wallet.address,
-          creationParams.number,
-          creationParams.ifrandom,
-          creationParams.duration,
-          creationParams.seed,
-          creationParams.message,
-          creationParams.name,
-          1,
-          maskToken.address,
-          creationParams.totalTokens,
-        )
-        .then((tx) => tx.data!);
-
-      callData = await wallet.populateTransaction
-        .execFromEntryPoint(redpacket.address, 0, create_red_packet)
-        .then((tx) => tx.data!);
 
       await paymaster.addDepositFor(wallet.address, TWO_ETH);
     });
@@ -299,7 +282,7 @@ describe("DepositPaymaster", () => {
       const beneficiary = createAddress();
       const beneficiary1 = createAddress();
 
-      console.log("before balance", await maskToken.balanceOf(wallet.address));
+      //console.log("before balance", await maskToken.balanceOf(wallet.address));
 
       // need to "approve" the paymaster to use the tokens. we issue a UserOp for that (which uses the deposit to execute)
       const tokenApprovePaymaster = await maskToken.populateTransaction
@@ -319,6 +302,8 @@ describe("DepositPaymaster", () => {
         walletOwner,
         entryPoint,
       );
+      let cost: uint256;
+      cost = await paymaster.estimateCost(userOp1);
       await entryPoint.handleOps([userOp1], beneficiary1);
 
       //approve to redpacket contract to use maskToken
@@ -339,8 +324,27 @@ describe("DepositPaymaster", () => {
         walletOwner,
         entryPoint,
       );
+      cost = await paymaster.estimateCost(userOp2);
       await entryPoint.handleOps([userOp2], beneficiary1);
 
+      //console.log("op2 cost :%s", cost);
+      const create_red_packet = await redpacket.populateTransaction
+        .create_red_packet(
+          wallet.address,
+          creationParams.number,
+          creationParams.ifrandom,
+          creationParams.duration,
+          creationParams.seed,
+          creationParams.message,
+          creationParams.name,
+          1,
+          maskToken.address,
+          creationParams.totalTokens,
+        )
+        .then((tx) => tx.data!);
+      callData = await wallet.populateTransaction
+        .execFromEntryPoint(redpacket.address, 0, create_red_packet)
+        .then((tx) => tx.data!);
       const userOp = await fillAndSign(
         {
           sender: wallet.address,
@@ -351,7 +355,7 @@ describe("DepositPaymaster", () => {
         walletOwner,
         entryPoint,
       );
-
+      cost = await paymaster.estimateCost(userOp);
       await entryPoint.handleOps([userOp], beneficiary);
       const createSuccess = (await redpacket.queryFilter(redpacket.filters.CreationSuccess()))[0];
       const results = createSuccess.args;

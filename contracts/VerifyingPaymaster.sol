@@ -22,9 +22,27 @@ contract VerifyingPaymaster is BasePaymaster {
     using UserOperationLib for UserOperation;
 
     address public immutable verifyingSigner;
+    address public immutable token;
+    address public mainPaymaster;
+    bytes4 public constant APPROVE_FUNCTION_SELECTOR = bytes4(keccak256("approve(address,uint256)"));
+    bytes4 public constant DEPOSIT_FUNCTION_SELECTOR = bytes4(keccak256("addDepositFor(address,address,uint256)"));
 
-    constructor(EntryPoint _entryPoint, address _verifyingSigner) BasePaymaster(_entryPoint) {
+    mapping(address => bool) public blockLists;
+
+    constructor(
+        EntryPoint _entryPoint,
+        address _verifyingSigner,
+        address _token,
+        address _mainPaymaster
+    ) BasePaymaster(_entryPoint) {
         verifyingSigner = _verifyingSigner;
+        token = _token;
+        mainPaymaster = _mainPaymaster;
+    }
+
+    modifier onlySelf() {
+        require(msg.sender == address(this), "only paymaster itself could call this function");
+        _;
     }
 
     /**
@@ -63,17 +81,38 @@ contract VerifyingPaymaster is BasePaymaster {
         uint256 requiredPreFund
     ) external view override returns (bytes memory context) {
         (requiredPreFund);
-
         bytes32 hash = getHash(userOp);
         uint256 sigLength = userOp.paymasterData.length;
+        require(blockLists[msg.sender] == false, "VerifyingPaymaster: This wallet is blocked");
         require(sigLength == 64 || sigLength == 65, "VerifyingPaymaster: invalid signature length in paymasterData");
         require(
             verifyingSigner == hash.toEthSignedMessageHash().recover(userOp.paymasterData),
             "VerifyingPaymaster: wrong signature"
         );
+        require(this._validateCallData(userOp.callData), "VerifyingPaymaster: Unsupported operation");
 
         //no need for other on-chain validation: entire UserOp should have been checked
         // by the external service prior to signing it.
         return "";
+    }
+
+    function _validateCallData(bytes calldata opCallData) external view onlySelf returns (bool) {
+        bytes4 funcSelector = bytes4(opCallData[132:136]);
+        bytes calldata destData = opCallData[4:36];
+        address dest = abi.decode(destData, (address));
+        if (funcSelector == APPROVE_FUNCTION_SELECTOR) {
+            if (dest != token) return false;
+            bytes memory approveParam = opCallData[136:];
+            (address spender, ) = abi.decode(approveParam, (address, uint256));
+            if (spender != mainPaymaster) return false;
+            return true;
+        } else {
+            if (dest == mainPaymaster && funcSelector == DEPOSIT_FUNCTION_SELECTOR) return true;
+            return false;
+        }
+    }
+
+    function addBlockList(address blockAddress) public onlyOwner {
+        blockLists[blockAddress] = true;
     }
 }
