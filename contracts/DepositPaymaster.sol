@@ -6,7 +6,6 @@ pragma solidity ^0.8.12;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./BasePaymaster.sol";
-import "hardhat/console.sol";
 import "./lib/UserOperation.sol";
 
 /*
@@ -115,9 +114,11 @@ contract DepositPaymaster is BasePaymaster {
         PAYTOKEN_TO_ETH_RATIO = radio;
     }
 
+    /**
+     * given the estimate gas cost base on the UserOperation
+     */
     function estimateCost(UserOperation calldata userOp) public view returns (uint256 amount) {
         uint256 requiredPrefund = userOp.requiredPreFund();
-        console.log("estimate Cost: %s", requiredPrefund);
         return requiredPrefund;
     }
 
@@ -158,19 +159,16 @@ contract DepositPaymaster is BasePaymaster {
         bytes calldata context,
         uint256 actualGasCost
     ) internal override {
-        console.log("mode %s actual Cost: %s", uint256(mode), actualGasCost);
         (address account, uint256 maxTokenCost, uint256 maxCost) = abi.decode(context, (address, uint256, uint256));
         //use same conversion rate as used for validation.
         uint256 actualTokenCost = ((actualGasCost + COST_OF_POST) * maxTokenCost) / maxCost;
         if (mode != PostOpMode.postOpReverted) {
             // attempt to pay with tokens:
-            //console.log("actualTokenCost: %s", actualTokenCost);
             payToken.safeTransferFrom(account, address(this), actualTokenCost);
         } else {
             //in case above transferFrom failed, pay with deposit:
             balances[account] -= actualTokenCost;
         }
-        console.log("account balance: %s", balances[account]);
         balances[owner()] += actualTokenCost;
     }
 }

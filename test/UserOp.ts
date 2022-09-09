@@ -1,6 +1,6 @@
 import { arrayify, defaultAbiCoder, keccak256 } from "ethers/lib/utils";
 import { BigNumber, Contract, Signer, Wallet } from "ethers";
-import { AddressZero, callDataCost, rethrow } from "./testutils";
+import { AddressZero, callDataCost, rethrow } from "./util";
 import { ecsign, toRpcSig, keccak256 as keccak256_buffer } from "ethereumjs-util";
 import { EntryPoint } from "../types";
 import { UserOperation } from "./UserOperation";

@@ -12,7 +12,6 @@ pragma solidity >=0.8.0;
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "hardhat/console.sol";
 
 contract HappyRedPacket is Initializable {
     struct RedPacket {
@@ -68,25 +67,17 @@ contract HappyRedPacket is Initializable {
         address _token_addr,
         uint256 _total_tokens
     ) public payable {
-        console.log("contract create_red_packet");
         nonce++;
         require(_total_tokens >= _number, "#tokens > #packets");
         require(_number > 0, "At least 1 recipient");
         require(_number < 256, "At most 255 recipients");
         require(_token_type == 0 || _token_type == 1, "Unrecognizable token type");
 
-        console.log("contract create_red_packet pass requirement\n");
-
         uint256 received_amount = _total_tokens;
         if (_token_type == 0) require(msg.value >= _total_tokens, "No enough ETH");
         else if (_token_type == 1) {
             // https://github.com/DimensionDev/Maskbook/issues/4168
-            // `received_amount` is not necessarily equal to `_total_tokens`
-            console.log(
-                "balance of msg sender:%s allowance: %s",
-                IERC20Upgradeable(_token_addr).balanceOf(msg.sender),
-                IERC20Upgradeable(_token_addr).allowance(msg.sender, address(this))
-            );
+            // `received_amount` is not necessarily equal to `_total_tokens
             uint256 balance_before_transfer = IERC20Upgradeable(_token_addr).balanceOf(address(this));
             IERC20Upgradeable(_token_addr).safeTransferFrom(msg.sender, address(this), _total_tokens);
             uint256 balance_after_transfer = IERC20Upgradeable(_token_addr).balanceOf(address(this));
