@@ -1,7 +1,7 @@
 import { use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { BigNumber, constants, Contract, Signer, utils } from "ethers";
-import { ethers, waffle } from "hardhat";
+import { ethers, network, waffle } from "hardhat";
 import EntryPointArtifact from "../artifacts/contracts/EntryPoint.sol/EntryPoint.json";
 import WalletProxyArtifact from "../artifacts/contracts/proxy/WalletProxy.sol/WalletProxy.json";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
@@ -35,9 +35,7 @@ describe("Wallet testing", () => {
     [userSigner, beneficialAccount] = await ethers.getSigners();
     userAddress = await userSigner.getAddress();
     beneficialAccountAddress = await beneficialAccount.getAddress();
-    // FIXME: hardhat chainId 0 error
-    // chainId = network.config.chainId;
-    chainId = 0;
+    chainId = network.config.chainId!;
 
     const SimpleWalletFactory = await ethers.getContractFactory("SimpleWalletUpgradeable");
     let simpleWallet = await SimpleWalletFactory.deploy();
@@ -104,12 +102,8 @@ describe("Wallet testing", () => {
     const result = await entryPoint.connect(AddressZero).callStatic.simulateValidation(userOperation);
     console.log(`simulateValidation result:`, result);
 
-    // chainId = network.config.chainId;
-    // chainId = 0;
-    // userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-    // console.log(userOperation);
-    // console.log("test chain id: ", chainId);
-    // await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+    console.log("test chain id: ", chainId);
+    await entryPoint.handleOps([userOperation], beneficialAccountAddress);
   });
 
   it("test upgradeability", async () => {
