@@ -5,7 +5,9 @@ import { ethers, network, waffle } from "hardhat";
 import EntryPointArtifact from "../artifacts/contracts/EntryPoint.sol/EntryPoint.json";
 import WalletProxyArtifact from "../artifacts/contracts/proxy/WalletProxy.sol/WalletProxy.json";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
+import { DepositPaymaster__factory, EntryPoint, MaskToken__factory } from "../types";
 import { UserOperation } from "./entity/userOperation";
+import { fillAndSign } from "./UserOp";
 import { AddressZero } from "./utils/const";
 import { signUserOp } from "./utils/UserOp";
 const { expect } = use(chaiAsPromised);
@@ -21,8 +23,9 @@ describe("Wallet testing", () => {
   let beneficialAccount: Signer;
   let beneficialAccountAddress: string;
 
-  let entryPoint: Contract;
+  let entryPoint: EntryPoint;
   let walletProxy: Contract;
+  let walletLogic: Contract;
   let singletonFactory;
   let walletProxyAddress: string;
   let walletProxyInitCode: utils.BytesLike;
@@ -56,7 +59,7 @@ describe("Wallet testing", () => {
     );
     console.log("predict wallet addr: ", walletAddress);
     walletProxyAddress = walletAddress;
-    walletProxy = new ethers.Contract(walletProxyAddress, SimpleWalletArtifact.abi, userSigner); // wallet doesn't exist yet
+    walletLogic = new ethers.Contract(walletProxyAddress, SimpleWalletArtifact.abi, userSigner); // wallet doesn't exist yet
     expect((await ethers.provider.getCode(walletProxyAddress)) == "0x").to.be.true;
   });
 
@@ -80,16 +83,16 @@ describe("Wallet testing", () => {
     // console.log("singletonFactory: ", singletonFactory.address, events[0].args);
     expect((await ethers.provider.getCode(walletProxyAddress)) == "0x").to.be.false;
     expect(events[0].args[0]).to.eql(walletProxyAddress);
-    expect(await walletProxy.entryPoint()).to.eql(entryPoint.address);
+    expect(await walletLogic.entryPoint()).to.eql(entryPoint.address);
 
     if ((await ethers.provider.getCode(walletProxyAddress)) === "0x") {
       // should not reach here
       userOperation.initCode = walletProxyInitCode;
       userOperation.nonce = 0;
     } else {
-      await walletProxy.addDeposit({ value: utils.parseUnits("1", "ether") });
-      expect(await walletProxy.getDeposit()).to.eql(utils.parseUnits("1", "ether"));
-      userOperation.nonce = parseInt(await walletProxy.nonce(), 10);
+      await walletLogic.addDeposit({ value: utils.parseUnits("1", "ether") });
+      expect(await walletLogic.getDeposit()).to.eql(utils.parseUnits("1", "ether"));
+      userOperation.nonce = parseInt(await walletLogic.nonce(), 10);
     }
     //transfer ether from simpleWallet for test
     let walletInterface = new utils.Interface(SimpleWalletArtifact.abi);
@@ -101,8 +104,7 @@ describe("Wallet testing", () => {
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
     const result = await entryPoint.connect(AddressZero).callStatic.simulateValidation(userOperation);
     console.log(`simulateValidation result:`, result);
-
-    console.log("test chain id: ", chainId);
+    console.log(userOperation);
     await entryPoint.handleOps([userOperation], beneficialAccountAddress);
   });
 
@@ -113,5 +115,36 @@ describe("Wallet testing", () => {
     await expect(walletProxy.connect(beneficialAccount).upgradeToAndCall(simpleWallet.address, "0x", false)).to.be
       .rejected;
     await walletProxy.upgradeToAndCall(simpleWallet.address, "0x", false);
+  });
+
+  it("test paymaster", async () => {
+    let maskToken = await new MaskToken__factory(userSigner).deploy();
+    let paymaster = await new DepositPaymaster__factory(userSigner).deploy(entryPoint.address, maskToken.address);
+    await paymaster.addStake(0, { value: utils.parseEther("2") });
+    await maskToken.approve(paymaster.address, ethers.constants.MaxUint256);
+    await paymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
+    await entryPoint.depositTo(paymaster.address, { value: utils.parseEther("1") });
+    const paymasterLockTokenDeposit = await paymaster.populateTransaction.lockTokenDeposit().then((tx) => tx.data!);
+    await walletLogic.exec(paymaster.address, 0, paymasterLockTokenDeposit);
+    let walletInterface = new utils.Interface(SimpleWalletArtifact.abi);
+    let callData = walletInterface.encodeFunctionData("execFromEntryPoint", [
+      maskToken.address,
+      0,
+      (await maskToken.populateTransaction.approve(paymaster.address, ethers.constants.MaxUint256)).data,
+    ]);
+    const userOp = await fillAndSign(
+      {
+        sender: walletProxyAddress,
+        paymaster: paymaster.address,
+        paymasterData: utils.hexZeroPad(maskToken.address, 32),
+        callData: callData,
+      },
+      userSigner,
+      entryPoint,
+    );
+    console.log(userOp);
+    await entryPoint.connect(AddressZero).callStatic.simulateValidation(userOp);
+    await entryPoint.handleOps([userOp], beneficialAccountAddress);
+    console.log("pass all");
   });
 });

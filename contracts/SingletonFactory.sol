@@ -23,7 +23,9 @@ contract SingletonFactory {
         assembly {
             createdContract := create2(0, add(initCode, 0x20), mload(initCode), salt)
         }
+
         console.log(">>>>>>>>>>>>>>>>>>SingletonFactory create2 address: ", createdContract);
+        require(createdContract != address(0), "SingletonFactory: Create2 failed");
         lastDeployedContract = createdContract;
         emit Deployed(createdContract, salt);
     }

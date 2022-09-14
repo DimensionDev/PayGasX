@@ -1,14 +1,5 @@
-/*
- * @Description:
- * @Version: 1.0
- * @Autor: z.cejay@gmail.com
- * @Date: 2022-07-25 10:53:52
- * @LastEditors: cejay
- * @LastEditTime: 2022-08-02 11:28:09
- */
-
 import { BytesLike } from "@ethersproject/bytes";
-import { BigNumberish } from "ethers";
+import { BigNumber, BigNumberish, providers } from "ethers";
 
 /**
  * @link https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/UserOperation.sol
@@ -79,14 +70,17 @@ class UserOperation {
    * @param web3 web3 instance
    * @param entryPointAddress entry point address
    */
-  private async estimateCallGas(provider: any, entryPointAddress) {
+  private async estimateCallGas(provider: providers.JsonRpcProvider, entryPointAddress: string) {
     const calldata: string = this.callData as string;
-    this.callGas = await provider.estimateGas({
-      from: entryPointAddress,
-      to: this.sender,
-      data: calldata,
-      value: 0,
-    });
+    const estimatedGas =
+      (
+        await provider.estimateGas({
+          from: entryPointAddress,
+          to: this.sender,
+          data: calldata,
+        })
+      ).toNumber() * 1.5;
+    this.callGas = BigNumber.from(Math.floor(estimatedGas));
   }
 
   /**
@@ -94,7 +88,7 @@ class UserOperation {
    * @param web3 web3 instance
    * @param entryPointAddress entry point address
    */
-  public async estimateGas(provider: any, entryPointAddress) {
+  public async estimateGas(provider: providers.JsonRpcProvider, entryPointAddress: string) {
     this.estimateVerificationGas();
     await this.estimateCallGas(provider, entryPointAddress);
   }

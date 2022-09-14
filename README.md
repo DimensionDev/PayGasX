@@ -18,6 +18,8 @@ Our demo focuses on two main components: `Paymaster` and `Contract Wallet`. In t
 
 We customized paymaster for taking $MASK as payment token.
 
+- Check the detailed [workflow of paymaster](DOC/Workflow.md)
+
 ### Contract Wallet
 
 Contract wallet is deployed for PayGasX users to help them manage their ERC20 assets.

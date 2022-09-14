@@ -5,6 +5,7 @@ pragma solidity ^0.8.12;
 import "./interface/IPaymaster.sol";
 import "./lib/Ownable.sol";
 import "./EntryPoint.sol";
+import "hardhat/console.sol";
 
 /* solhint-disable reason-string */
 /**

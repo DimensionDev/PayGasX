@@ -10,3 +10,5 @@ artifacts/
 .openzeppelin/
 .env
 types/
+.npm/
+Library/

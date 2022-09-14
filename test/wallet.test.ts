@@ -1,7 +1,6 @@
 import { expect } from "chai";
 import { Wallet } from "ethers";
 import { ethers } from "hardhat";
-
 import { SimpleWalletUpgradeable } from "../types";
 import { createWalletOwner, deployWallet, ONE_ETH, TWO_ETH } from "./testutils";
 
