@@ -115,11 +115,10 @@ contract DepositPaymaster is BasePaymaster {
     }
 
     /**
-     * given the estimate gas cost base on the UserOperation
+     * given the estimate gas cost, base on the UserOperation and specific token to eth ratio
      */
     function estimateCost(UserOperation calldata userOp) public view returns (uint256 amount) {
-        uint256 requiredPrefund = userOp.requiredPreFund();
-        return requiredPrefund;
+        return PAYTOKEN_TO_ETH_RATIO * userOp.requiredPreFund();
     }
 
     /**
