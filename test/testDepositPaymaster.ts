@@ -20,7 +20,6 @@ import { fillAndSign } from "./UserOp";
 import { hexZeroPad, parseEther } from "ethers/lib/utils";
 import { creationParams } from "./constants";
 import { uint256 } from "./solidityTypes";
-import { revertToSnapShot, takeSnapshot } from "./helper";
 
 const { deployContract } = waffle;
 

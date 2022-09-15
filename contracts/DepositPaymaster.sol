@@ -29,7 +29,7 @@ contract DepositPaymaster is BasePaymaster {
     uint256 public constant COST_OF_POST = 35000;
 
     //paytoken to eth ratio
-    uint256 public PAYTOKEN_TO_ETH_RATIO = 1000;
+    uint256 public PAYTOKEN_TO_ETH_RATIO = 1500;
 
     IERC20 public payToken;
 
@@ -161,6 +161,7 @@ contract DepositPaymaster is BasePaymaster {
         (address account, uint256 maxTokenCost, uint256 maxCost) = abi.decode(context, (address, uint256, uint256));
         //use same conversion rate as used for validation.
         uint256 actualTokenCost = ((actualGasCost + COST_OF_POST) * maxTokenCost) / maxCost;
+
         if (mode != PostOpMode.postOpReverted) {
             // attempt to pay with tokens:
             payToken.safeTransferFrom(account, address(this), actualTokenCost);
