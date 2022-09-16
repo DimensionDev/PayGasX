@@ -26,7 +26,7 @@ export async function deployWallet(
   const walletLogicContract = await new SimpleWalletUpgradeable__factory(signer).deploy();
 
   const simpleWalletInterface = new utils.Interface(SimpleWalletArtifact.abi);
-  const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPointAddress, ownerAddress]);
+  const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPointAddress]);
 
   const wallet = await new WalletProxy__factory(signer).deploy(ownerAddress, walletLogicContract.address, data);
 
