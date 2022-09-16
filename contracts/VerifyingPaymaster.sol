@@ -25,7 +25,6 @@ contract VerifyingPaymaster is BasePaymaster {
     address public immutable token;
     address public mainPaymaster;
     bytes4 public constant APPROVE_FUNCTION_SELECTOR = bytes4(keccak256("approve(address,uint256)"));
-    bytes4 public constant DEPOSIT_FUNCTION_SELECTOR = bytes4(keccak256("addDepositFor(address,address,uint256)"));
 
     mapping(address => bool) public blockLists;
 
@@ -106,10 +105,8 @@ contract VerifyingPaymaster is BasePaymaster {
             (address spender, ) = abi.decode(approveParam, (address, uint256));
             if (spender != mainPaymaster) return false;
             return true;
-        } else {
-            if (dest == mainPaymaster && funcSelector == DEPOSIT_FUNCTION_SELECTOR) return true;
-            return false;
         }
+        return false;
     }
 
     function addBlockList(address blockAddress) public onlyOwner {
