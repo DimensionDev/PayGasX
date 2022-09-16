@@ -27,7 +27,7 @@ import { AddressZero, createWalletOwner, createAddress, deployEntryPoint, signUs
 import { uint256 } from "./solidityTypes";
 import { revertToSnapShot, takeSnapshot } from "./helper";
 
-describe("DepositPaymaster V2", () => {
+describe("DepositPaymaster", () => {
   let walletOwner: Wallet;
   let contractCreator: Signer;
   let beneficiaryAddress: string;
@@ -93,46 +93,23 @@ describe("DepositPaymaster V2", () => {
       //expect((await paymaster.depositInfo(contractWallet.address)).amount.toString()).to.eql("100");
     });
 
-    it("should fail to withdraw without unlock", async () => {
+    it("should fail to withdraw if not owner", async () => {
       await paymaster.addDepositFor(wallet.address, 1);
-      const paymasterWithdraw = await paymaster.populateTransaction
-        .withdrawTokensTo(AddressZero, 1)
-        .then((tx) => tx.data!);
-
-      await expect(wallet.exec(paymaster.address, 0, paymasterWithdraw)).to.revertedWith(
-        "DepositPaymaster: must unlockTokenDeposit",
+      const otherAcc = signers[4];
+      await expect(paymaster.connect(otherAcc).withdrawTokensTo(wallet.address, 1)).to.revertedWith(
+        "Ownable: caller is not the owner",
       );
     });
 
-    it("should fail to withdraw within the same block ", async () => {
+    it("should succeed to withdraw", async () => {
       await paymaster.addDepositFor(wallet.address, 1);
-      const paymasterUnlock = await paymaster.populateTransaction.unlockTokenDeposit().then((tx) => tx.data!);
-      const paymasterWithdraw = await paymaster.populateTransaction
-        .withdrawTokensTo(AddressZero, 1)
-        .then((tx) => tx.data!);
-
-      await expect(
-        wallet.execBatch([paymaster.address, paymaster.address], [paymasterUnlock, paymasterWithdraw]),
-      ).to.be.revertedWith("DepositPaymaster: must unlockTokenDeposit");
-    });
-
-    it("should succeed to withdraw after unlock", async () => {
-      await paymaster.addDepositFor(wallet.address, 1);
-      const paymasterUnlock = await paymaster.populateTransaction.unlockTokenDeposit().then((tx) => tx.data!);
-      const target = createAddress();
-      const paymasterWithdraw = await paymaster.populateTransaction.withdrawTokensTo(target, 1).then((tx) => tx.data!);
-      await wallet.exec(paymaster.address, 0, paymasterUnlock);
-      await wallet.exec(paymaster.address, 0, paymasterWithdraw);
-      expect(await maskToken.balanceOf(target)).to.eq(1);
+      await paymaster.withdrawTokensTo(wallet.address, 1);
+      expect(await maskToken.balanceOf(wallet.address)).to.eq(1);
     });
 
     it("should fail to withdraw if amount more than balance", async () => {
       await paymaster.addDepositFor(wallet.address, 1);
-      const paymasterUnlock = await paymaster.populateTransaction.unlockTokenDeposit().then((tx) => tx.data!);
-      const target = createAddress();
-      const paymasterWithdraw = await paymaster.populateTransaction.withdrawTokensTo(target, 2).then((tx) => tx.data!);
-      await wallet.exec(paymaster.address, 0, paymasterUnlock);
-      await expect(wallet.exec(paymaster.address, 0, paymasterWithdraw)).to.be.reverted;
+      await expect(paymaster.withdrawTokensTo(wallet.address, 2)).to.be.reverted;
     });
   });
 
