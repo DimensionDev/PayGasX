@@ -1,35 +1,36 @@
-import "./aa.init";
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import "./aa.init";
 
 import {
   DepositPaymaster,
   DepositPaymaster__factory,
   EntryPoint,
+  EntryPoint__factory,
+  HappyRedPacket,
+  HappyRedPacket__factory,
   MaskToken,
   MaskToken__factory,
   SimpleWallet,
-  SimpleWallet__factory,
   SingletonFactory,
   SingletonFactory__factory,
-  HappyRedPacket,
-  HappyRedPacket__factory,
   TestCounter,
   TestCounter__factory,
 } from "../types";
 
-import { Signer, utils, Wallet } from "ethers";
+import { constants, Contract, Signer, utils, Wallet } from "ethers";
 import { hexZeroPad, parseEther } from "ethers/lib/utils";
+import SimpleWalletArtifact from "../artifacts/contracts/SimpleWallet.sol/SimpleWallet.json";
 import { UserOperation } from "../Objects/userOperation";
-import { MaxUint256, creationParams } from "./constants";
-
-import { AddressZero, createWalletOwner, createAddress, deployEntryPoint, signUserOp } from "./util";
-import { uint256 } from "./solidityTypes";
+import { AddressZero, creationParams, MaxUint256, paymasterStake, unstakeDelaySec } from "./constants";
 import { revertToSnapShot, takeSnapshot } from "./helper";
+import { ContractWalletInfo, createWallet, getContractWalletInfo, signUserOp } from "./utils";
+const hardhatProvider = ethers.provider;
 
 describe("DepositPaymaster", () => {
   let walletOwner: Wallet;
   let contractCreator: Signer;
+  let creatorAddress: string;
   let beneficiaryAddress: string;
   let sponsor: Signer;
   let signers: Signer[];
@@ -40,26 +41,25 @@ describe("DepositPaymaster", () => {
   let maskToken: MaskToken;
   let paymaster: DepositPaymaster;
   let walletFactory: SingletonFactory;
-  let contractWallet: SimpleWallet;
   let redPacket: HappyRedPacket;
   let counter: TestCounter;
 
-  before(async function () {
-    entryPoint = await deployEntryPoint(1, 1);
-    entryPointStatic = entryPoint.connect(AddressZero);
-
+  before(async () => {
     signers = await ethers.getSigners();
     contractCreator = signers[0];
-    //creatorAddress = await contractCreator.getAddress();
-
     sponsor = signers[1];
+    creatorAddress = await contractCreator.getAddress();
     beneficiaryAddress = await sponsor.getAddress();
 
-    walletOwner = createWalletOwner();
-
+    walletFactory = await new SingletonFactory__factory(contractCreator).deploy();
+    entryPoint = await new EntryPoint__factory(contractCreator).deploy(
+      walletFactory.address,
+      paymasterStake,
+      unstakeDelaySec,
+    );
+    entryPointStatic = entryPoint.connect(AddressZero);
     maskToken = await new MaskToken__factory(contractCreator).deploy();
     paymaster = await new DepositPaymaster__factory(contractCreator).deploy(entryPoint.address, maskToken.address);
-    walletFactory = await new SingletonFactory__factory(contractCreator).deploy();
 
     redPacket = await new HappyRedPacket__factory(contractCreator).deploy();
     counter = await new TestCounter__factory(contractCreator).deploy();
@@ -78,45 +78,67 @@ describe("DepositPaymaster", () => {
   });
 
   describe("paymaster deposit and withdraw $mask token", () => {
-    let wallet: SimpleWallet;
+    let contractWallet: SimpleWallet;
+    let walletInfo: ContractWalletInfo;
 
     before(async () => {
-      wallet = await new SimpleWallet__factory(contractCreator).deploy(
+      walletOwner = createWallet();
+      let simpleWalletCreateSalt = 0;
+      walletInfo = await getContractWalletInfo(
+        simpleWalletCreateSalt,
         entryPoint.address,
-        await contractCreator.getAddress(),
+        walletOwner.address,
+        walletFactory.address,
       );
+      await walletFactory.connect(contractCreator).deploy(walletInfo.initCode, constants.HashZero);
+
+      contractWallet = new Contract(walletInfo.address, SimpleWalletArtifact.abi, hardhatProvider) as SimpleWallet;
     });
 
     it("should deposit and read balance", async () => {
-      await paymaster.addDepositFor(wallet.address, 100);
-      expect(await paymaster.depositInfo(wallet.address)).to.eql({ amount: 100 });
+      await paymaster.addDepositFor(contractWallet.address, 100);
+      expect(await paymaster.depositInfo(contractWallet.address)).to.eql({ amount: 100 });
       //expect((await paymaster.depositInfo(contractWallet.address)).amount.toString()).to.eql("100");
     });
 
     it("should fail to withdraw if not owner", async () => {
-      await paymaster.addDepositFor(wallet.address, 1);
+      await paymaster.addDepositFor(contractWallet.address, 1);
       const otherAcc = signers[4];
-      await expect(paymaster.connect(otherAcc).withdrawTokensTo(wallet.address, 1)).to.revertedWith(
+      await expect(paymaster.connect(otherAcc).withdrawTokensTo(contractWallet.address, 1)).to.revertedWith(
         "Ownable: caller is not the owner",
       );
     });
 
     it("should succeed to withdraw", async () => {
-      await paymaster.addDepositFor(wallet.address, 1);
-      await paymaster.withdrawTokensTo(wallet.address, 1);
-      expect(await maskToken.balanceOf(wallet.address)).to.eq(1);
+      await paymaster.addDepositFor(contractWallet.address, 1);
+      await paymaster.withdrawTokensTo(contractWallet.address, 1);
+      expect(await maskToken.balanceOf(contractWallet.address)).to.eq(1);
     });
 
     it("should fail to withdraw if amount more than balance", async () => {
-      await paymaster.addDepositFor(wallet.address, 1);
-      await expect(paymaster.withdrawTokensTo(wallet.address, 2)).to.be.reverted;
+      await paymaster.addDepositFor(contractWallet.address, 1);
+      await expect(paymaster.withdrawTokensTo(contractWallet.address, 2)).to.be.reverted;
     });
   });
 
   describe("Use $Mask Pay for Gas", () => {
+    let contractWallet: SimpleWallet;
+    let walletInfo: ContractWalletInfo;
+
     before(async () => {
-      contractWallet = await new SimpleWallet__factory(contractCreator).deploy(entryPoint.address, walletOwner.address);
+      walletOwner = createWallet();
+      let simpleWalletCreateSalt = 0;
+      walletInfo = await getContractWalletInfo(
+        simpleWalletCreateSalt,
+        entryPoint.address,
+        walletOwner.address,
+        walletFactory.address,
+      );
+
+      await walletFactory.connect(contractCreator).deploy(walletInfo.initCode, constants.HashZero);
+      contractWallet = new Contract(walletInfo.address, SimpleWalletArtifact.abi) as SimpleWallet;
     });
+
     it("success to pay gas with $Mask for approve paymaster use token and create a redPacket", async () => {
       // approve UserOp
       const userOp1 = await getApproveUserOperation(contractWallet, paymaster, maskToken, entryPoint, walletOwner);
@@ -239,45 +261,12 @@ async function getApproveUserOperation(
   userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
   userOp1.paymaster = paymaster.address;
   userOp1.paymasterData = hexZeroPad(maskToken.address, 32);
-  const tokenApprovePaymaster = await maskToken.populateTransaction
-    .approve(paymaster.address, MaxUint256)
-    .then((tx) => tx.data!);
-  const execApprove = await contractWallet.populateTransaction
-    .execFromEntryPoint(maskToken.address, 0, tokenApprovePaymaster)
-    .then((tx) => tx.data!);
-  userOp1.callData = execApprove;
-  const hardhatProvider = ethers.provider;
-  await userOp1.estimateGas(hardhatProvider, entryPoint.address);
-
-  const chainId = (await hardhatProvider.getNetwork()).chainId;
-  userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, walletOwner.privateKey);
-
-  return userOp1;
-}
-
-async function getExecTestContractUserOperation(
-  nonce: uint256,
-  contractWallet: SimpleWallet,
-  paymaster: DepositPaymaster,
-  maskToken: MaskToken,
-  entryPoint: EntryPoint,
-  walletOwner: Wallet,
-  counter: TestCounter,
-): Promise<UserOperation> {
-  let userOp1 = new UserOperation();
-  userOp1.nonce = nonce;
-  userOp1.sender = contractWallet.address;
-  userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
-  userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-  userOp1.paymaster = paymaster.address;
-  userOp1.paymasterData = hexZeroPad(maskToken.address, 32);
-
-  const counterJustEmit = await counter.populateTransaction.justemit().then((tx) => tx.data!);
-  const callData = await contractWallet.populateTransaction
-    .execFromEntryPoint(counter.address, 0, counterJustEmit)
-    .then((tx) => tx.data!);
-  userOp1.callData = callData;
-  const hardhatProvider = ethers.provider;
+  const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [paymaster.address, MaxUint256]);
+  userOp1.callData = contractWallet.interface.encodeFunctionData("execFromEntryPoint", [
+    maskToken.address,
+    0,
+    tokenApprovePaymaster,
+  ]);
   await userOp1.estimateGas(hardhatProvider, entryPoint.address);
 
   const chainId = (await hardhatProvider.getNetwork()).chainId;
@@ -287,7 +276,7 @@ async function getExecTestContractUserOperation(
 }
 
 async function getApproveMaskToRedPacketUserOperation(
-  nonce: uint256,
+  nonce: number,
   contractWallet: SimpleWallet,
   paymaster: DepositPaymaster,
   maskToken: MaskToken,
@@ -295,31 +284,29 @@ async function getApproveMaskToRedPacketUserOperation(
   walletOwner: Wallet,
   redPacket: HappyRedPacket,
 ): Promise<UserOperation> {
-  let userOp1 = new UserOperation();
-  userOp1.nonce = nonce;
-  userOp1.sender = contractWallet.address;
-  userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
-  userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-  userOp1.paymaster = paymaster.address;
-  userOp1.paymasterData = hexZeroPad(maskToken.address, 32);
-  const tokenApprovePaymaster = await maskToken.populateTransaction
-    .approve(redPacket.address, MaxUint256)
-    .then((tx) => tx.data!);
-  const execApprove = await contractWallet.populateTransaction
-    .execFromEntryPoint(maskToken.address, 0, tokenApprovePaymaster)
-    .then((tx) => tx.data!);
-  userOp1.callData = execApprove;
-  const hardhatProvider = ethers.provider;
-  await userOp1.estimateGas(hardhatProvider, entryPoint.address);
+  let userOp = new UserOperation();
+  userOp.nonce = nonce;
+  userOp.sender = contractWallet.address;
+  userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
+  userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+  userOp.paymaster = paymaster.address;
+  userOp.paymasterData = hexZeroPad(maskToken.address, 32);
+  const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [redPacket.address, MaxUint256]);
+  userOp.callData = contractWallet.interface.encodeFunctionData("execFromEntryPoint", [
+    maskToken.address,
+    0,
+    tokenApprovePaymaster,
+  ]);
+  await userOp.estimateGas(hardhatProvider, entryPoint.address);
 
   const chainId = (await hardhatProvider.getNetwork()).chainId;
-  userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, walletOwner.privateKey);
+  userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
 
-  return userOp1;
+  return userOp;
 }
 
 async function getExecCreateRedPacketUserOperation(
-  nonce: uint256,
+  nonce: number,
   contractWallet: SimpleWallet,
   paymaster: DepositPaymaster,
   maskToken: MaskToken,
@@ -327,39 +314,36 @@ async function getExecCreateRedPacketUserOperation(
   walletOwner: Wallet,
   redPacket: HappyRedPacket,
 ): Promise<UserOperation> {
-  let userOp1 = new UserOperation();
-  userOp1.nonce = nonce;
-  userOp1.sender = contractWallet.address;
-  userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
-  userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-  userOp1.paymaster = paymaster.address;
-  userOp1.paymasterData = hexZeroPad(maskToken.address, 32);
+  let userOp = new UserOperation();
+  userOp.nonce = nonce;
+  userOp.sender = contractWallet.address;
+  userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
+  userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+  userOp.paymaster = paymaster.address;
+  userOp.paymasterData = hexZeroPad(maskToken.address, 32);
 
-  const create_red_packet = await redPacket.populateTransaction
-    .create_red_packet(
-      contractWallet.address,
-      creationParams.number,
-      creationParams.ifrandom,
-      creationParams.duration,
-      creationParams.seed,
-      creationParams.message,
-      creationParams.name,
-      1,
-      maskToken.address,
-      creationParams.totalTokens,
-    )
-    .then((tx) => tx.data!);
-  const callData = await contractWallet.populateTransaction
-    .execFromEntryPoint(redPacket.address, 0, create_red_packet)
-    .then((tx) => tx.data!);
+  const createRedPacketData = redPacket.interface.encodeFunctionData("create_red_packet", [
+    contractWallet.address,
+    creationParams.number,
+    creationParams.ifrandom,
+    creationParams.duration,
+    creationParams.seed,
+    creationParams.message,
+    creationParams.name,
+    1,
+    maskToken.address,
+    creationParams.totalTokens,
+  ]);
 
-  userOp1.callData = callData;
-
-  const hardhatProvider = ethers.provider;
-  await userOp1.estimateGas(hardhatProvider, entryPoint.address);
+  userOp.callData = contractWallet.interface.encodeFunctionData("execFromEntryPoint", [
+    redPacket.address,
+    0,
+    createRedPacketData,
+  ]);
+  await userOp.estimateGas(hardhatProvider, entryPoint.address);
 
   const chainId = (await hardhatProvider.getNetwork()).chainId;
-  userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, walletOwner.privateKey);
+  userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
 
-  return userOp1;
+  return userOp;
 }
