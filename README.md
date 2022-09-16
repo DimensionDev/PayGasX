@@ -28,6 +28,8 @@ Contract wallet is deployed for PayGasX users to help them manage their ERC20 as
 
 - API of [`EntryPoint`](DOC/EntryPointAPI.md)
 
+## GasReport
+
 ## Contribute
 
 Any contribution is welcomed to make it better.
