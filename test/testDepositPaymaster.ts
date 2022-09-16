@@ -1,26 +1,25 @@
-import "./aa.init";
-import { ethers, waffle } from "hardhat";
 import { expect } from "chai";
+import { ethers, waffle } from "hardhat";
 import {
-  SimpleWallet,
-  SimpleWallet__factory,
-  EntryPoint,
   DepositPaymaster,
   DepositPaymaster__factory,
-  MaskToken,
-  MaskToken__factory,
-  TestCounter,
-  TestCounter__factory,
+  EntryPoint,
   HappyRedPacket,
   HappyRedPacket__factory,
+  MaskToken,
+  MaskToken__factory,
+  SimpleWalletUpgradeable,
+  TestCounter,
+  TestCounter__factory,
 } from "../types";
+import "./aa.init";
 
-import { AddressZero, createAddress, createWalletOwner, deployEntryPoint, FIVE_ETH, ONE_ETH, TWO_ETH } from "./util";
-import { fillAndSign } from "./UserOp";
 import { hexZeroPad, parseEther } from "ethers/lib/utils";
 import { creationParams } from "./constants";
 import { uint256 } from "./solidityTypes";
-import { revertToSnapShot, takeSnapshot } from "./helper";
+import { deployWallet } from "./testutils";
+import { fillAndSign } from "./UserOp";
+import { AddressZero, createAddress, createWalletOwner, deployEntryPoint, FIVE_ETH, ONE_ETH, TWO_ETH } from "./util";
 
 const { deployContract } = waffle;
 
@@ -53,13 +52,10 @@ describe("DepositPaymaster", () => {
   });
 
   describe("deposit and withdraw", () => {
-    let wallet: SimpleWallet;
+    let wallet: SimpleWalletUpgradeable;
 
     before(async () => {
-      wallet = await new SimpleWallet__factory(ethersSigner).deploy(
-        entryPoint.address,
-        await ethersSigner.getAddress(),
-      );
+      wallet = await deployWallet(entryPoint.address, ethersSigner.getAddress());
       //let contractCreator = await ethersSigner.getAddress();
       //maskToken.transfer(wallet.address, ONE_ETH);
     });
@@ -98,13 +94,13 @@ describe("DepositPaymaster", () => {
   });
 
   describe("#validatePaymasterUserOp", () => {
-    let wallet: SimpleWallet;
+    let wallet: SimpleWalletUpgradeable;
     const gasPrice = 1e9;
     let walletOwner: string;
 
     before(async () => {
       walletOwner = await ethersSigner.getAddress();
-      wallet = await new SimpleWallet__factory(ethersSigner).deploy(entryPoint.address, walletOwner);
+      wallet = await deployWallet(entryPoint.address, walletOwner);
     });
 
     it("should fail if no token", async () => {
@@ -175,12 +171,12 @@ describe("DepositPaymaster", () => {
   });
 
   describe("#handleOps", () => {
-    let wallet: SimpleWallet;
+    let wallet: SimpleWalletUpgradeable;
     const walletOwner = createWalletOwner();
     let counter: TestCounter;
     let callData: string;
     before(async () => {
-      wallet = await new SimpleWallet__factory(ethersSigner).deploy(entryPoint.address, walletOwner.address);
+      wallet = await deployWallet(entryPoint.address, walletOwner.address);
       counter = await new TestCounter__factory(ethersSigner).deploy();
       const counterJustEmit = await counter.populateTransaction.justemit().then((tx) => tx.data!);
       callData = await wallet.populateTransaction
@@ -263,13 +259,13 @@ describe("DepositPaymaster", () => {
   });
 
   describe("#create a RedPacket", () => {
-    let wallet: SimpleWallet;
+    let wallet: SimpleWalletUpgradeable;
     let redPacket: HappyRedPacket;
     const walletOwner = createWalletOwner();
     let callData: string;
 
     before(async () => {
-      wallet = await new SimpleWallet__factory(ethersSigner).deploy(entryPoint.address, walletOwner.address);
+      wallet = await deployWallet(entryPoint.address, walletOwner.address);
 
       redPacket = await new HappyRedPacket__factory(ethersSigner).deploy();
       const initialTokens = parseEther("3");
