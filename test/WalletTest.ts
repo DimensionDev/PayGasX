@@ -1,22 +1,32 @@
 import { use } from "chai";
 import chaiAsPromised from "chai-as-promised";
-import { BigNumber, constants, Contract, Signer, utils } from "ethers";
-import { ethers, network, waffle } from "hardhat";
-import EntryPointArtifact from "../artifacts/contracts/EntryPoint.sol/EntryPoint.json";
-import WalletProxyArtifact from "../artifacts/contracts/proxy/WalletProxy.sol/WalletProxy.json";
-import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
-import { DepositPaymaster__factory, EntryPoint, MaskToken__factory, VerifyingPaymaster__factory } from "../types";
+import { BigNumber, constants, Signer, utils } from "ethers";
+import { ethers, network } from "hardhat";
+import {
+  DepositPaymaster__factory,
+  EntryPoint,
+  EntryPoint__factory,
+  MaskToken__factory,
+  SimpleWalletUpgradeable,
+  SimpleWalletUpgradeable__factory,
+  SingletonFactory,
+  SingletonFactory__factory,
+  VerifyingPaymaster__factory,
+  WalletProxy,
+  WalletProxy__factory,
+} from "../types";
 import { UserOperation } from "./entity/userOperation";
 import { fillAndSign } from "./UserOp";
 import { AddressZero } from "./utils/const";
 import { getPayMasterSignHash, signPayMasterHash, signUserOp } from "./utils/UserOp";
 const { expect } = use(chaiAsPromised);
-const { deployContract } = waffle;
 const singletonFactoryAddress = "0xce0042B868300000d44A59004Da54A005ffdcf9f";
 
 describe("Wallet testing", () => {
   // for hardhat local testing environment
   const mnemonic = "test test test test test test test test test test test junk";
+  let deployer: Signer;
+  let sponsorSigner: Signer;
   let userSigner: Signer;
   let userAddress: string;
   let userPrivateKey: string;
@@ -24,9 +34,10 @@ describe("Wallet testing", () => {
   let beneficialAccountAddress: string;
 
   let entryPoint: EntryPoint;
-  let walletProxy: Contract;
-  let walletLogic: Contract;
-  let singletonFactory;
+  let entryPointStatic: EntryPoint;
+  let walletProxy: WalletProxy;
+  let walletLogic: SimpleWalletUpgradeable;
+  let singletonFactory: SingletonFactory;
   let walletProxyAddress: string;
   let walletProxyInitCode: utils.BytesLike;
 
@@ -35,19 +46,18 @@ describe("Wallet testing", () => {
 
   before(async () => {
     userPrivateKey = ethers.Wallet.fromMnemonic(mnemonic).privateKey;
-    [userSigner, beneficialAccount] = await ethers.getSigners();
+    [userSigner, beneficialAccount, deployer, sponsorSigner] = await ethers.getSigners();
     userAddress = await userSigner.getAddress();
     beneficialAccountAddress = await beneficialAccount.getAddress();
     chainId = network.config.chainId!;
 
-    const SimpleWalletFactory = await ethers.getContractFactory("SimpleWalletUpgradeable");
-    let simpleWallet = await SimpleWalletFactory.deploy();
-    const SingletonFactory = await ethers.getContractFactory("SingletonFactory");
-    singletonFactory = await SingletonFactory.deploy();
-    entryPoint = await deployContract(userSigner, EntryPointArtifact, [singletonFactory.address, 10, 10], {});
+    let simpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
+    singletonFactory = await new SingletonFactory__factory(deployer).deploy();
+    entryPoint = await new EntryPoint__factory(deployer).deploy(singletonFactory.address, 10, 10);
+    entryPointStatic = entryPoint.connect(AddressZero);
 
     const WalletProxyFactory = await ethers.getContractFactory("WalletProxy");
-    const simpleWalletInterface = new utils.Interface(SimpleWalletArtifact.abi);
+    const simpleWalletInterface = new utils.Interface(SimpleWalletUpgradeable__factory.abi);
     const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPoint.address]);
     // WalletProxy constructor
     walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
@@ -59,7 +69,12 @@ describe("Wallet testing", () => {
     );
     console.log("predict wallet addr: ", walletAddress);
     walletProxyAddress = walletAddress;
-    walletLogic = new ethers.Contract(walletProxyAddress, SimpleWalletArtifact.abi, userSigner); // wallet doesn't exist yet
+    walletProxy = new ethers.Contract(walletProxyAddress, WalletProxy__factory.abi, userSigner) as WalletProxy;
+    walletLogic = new ethers.Contract(
+      walletProxyAddress,
+      SimpleWalletUpgradeable__factory.abi,
+      userSigner,
+    ) as SimpleWalletUpgradeable; // wallet doesn't exist yet
     expect((await ethers.provider.getCode(walletProxyAddress)) == "0x").to.be.true;
   });
 
@@ -92,17 +107,16 @@ describe("Wallet testing", () => {
     } else {
       await walletLogic.addDeposit({ value: utils.parseUnits("1", "ether") });
       expect(await walletLogic.getDeposit()).to.eql(utils.parseUnits("1", "ether"));
-      userOperation.nonce = parseInt(await walletLogic.nonce(), 10);
+      userOperation.nonce = await walletLogic.nonce();
     }
     //transfer ether from simpleWallet for test
-    let walletInterface = new utils.Interface(SimpleWalletArtifact.abi);
-    userOperation.callData = walletInterface.encodeFunctionData("execFromEntryPoint", [
+    userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
       userAddress,
       utils.parseUnits("0.00001", "ether"),
       "0x",
     ]);
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-    const result = await entryPoint.connect(AddressZero).callStatic.simulateValidation(userOperation);
+    const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
     console.log(`simulateValidation result:`, result);
     await entryPoint.handleOps([userOperation], beneficialAccountAddress);
   });
@@ -110,7 +124,6 @@ describe("Wallet testing", () => {
   it("test upgradeability", async () => {
     const SimpleWalletFactory = await ethers.getContractFactory("SimpleWalletUpgradeable");
     let simpleWallet = await SimpleWalletFactory.deploy();
-    walletProxy = new ethers.Contract(walletProxyAddress, WalletProxyArtifact.abi, userSigner);
     await expect(walletProxy.connect(beneficialAccount).upgradeToAndCall(simpleWallet.address, "0x", false)).to.be
       .rejected;
     await walletProxy.upgradeToAndCall(simpleWallet.address, "0x", false);
@@ -134,20 +147,23 @@ describe("Wallet testing", () => {
     await verifyingPaymaster.deposit({ value: utils.parseEther("1") });
     await verifyingPaymaster.addStake(0, { value: utils.parseEther("1") });
 
-    let walletInterface = new utils.Interface(SimpleWalletArtifact.abi);
     let userOp = new UserOperation();
     userOp.sender = walletProxyAddress;
     userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
     userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
     userOp.paymaster = verifyingPaymaster.address;
     userOp.initCode = "0x";
-    userOp.nonce = parseInt(await walletLogic.nonce(), 10);
+    userOp.nonce = await walletLogic.nonce();
 
     const approveData = maskToken.interface.encodeFunctionData("approve", [
       depositPaymaster.address,
       constants.MaxUint256,
     ]);
-    userOp.callData = walletInterface.encodeFunctionData("execFromEntryPoint", [maskToken.address, 0, approveData]);
+    userOp.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+      maskToken.address,
+      0,
+      approveData,
+    ]);
 
     await userOp.estimateGas(ethers.provider, entryPoint.address);
 
@@ -156,7 +172,7 @@ describe("Wallet testing", () => {
 
     // const chainId = (await hardhatProvider.getNetwork()).chainId;
     userOp.signature = signUserOp(userOp, entryPoint.address, chainId, userPrivateKey);
-    let result = await entryPoint.connect(AddressZero).callStatic.simulateValidation(userOp);
+    let result = await entryPointStatic.callStatic.simulateValidation(userOp);
     console.log(result);
 
     await entryPoint.handleOps([userOp], beneficialAccountAddress);
@@ -169,8 +185,7 @@ describe("Wallet testing", () => {
       .lockTokenDeposit()
       .then((tx) => tx.data!);
     await walletLogic.exec(depositPaymaster.address, 0, paymasterLockTokenDeposit);
-    // TODO: simplify this to wallet.interface.encodeFunctionData
-    let callData = walletInterface.encodeFunctionData("execFromEntryPoint", [
+    let callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
       maskToken.address,
       0,
       (await maskToken.populateTransaction.approve(verifyingPaymaster.address, constants.MaxUint256)).data,
@@ -185,7 +200,7 @@ describe("Wallet testing", () => {
       userSigner,
       entryPoint,
     );
-    result = await entryPoint.connect(AddressZero).callStatic.simulateValidation(userOp2);
+    result = await entryPointStatic.callStatic.simulateValidation(userOp2);
     console.log(result);
 
     await entryPoint.handleOps([userOp2], beneficialAccountAddress);
