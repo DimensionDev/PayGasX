@@ -48,10 +48,10 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable {
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
 
-    function initialize(EntryPoint anEntryPoint) public initializer {
+    function initialize(EntryPoint anEntryPoint, address anOwner) public initializer {
         _entryPoint = anEntryPoint;
         // set by proxy constructor
-        // _setAdmin(anOwner);
+        _setAdmin(anOwner);
     }
 
     modifier onlyOwner() {
