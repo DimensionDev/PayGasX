@@ -18,7 +18,7 @@ import {
   VerifyingPaymaster,
   VerifyingPaymaster__factory,
 } from "../types";
-import { AddressZero, MaxUint256, ONE_ETH, paymasterStake, unstakeDelaySec } from "./constants";
+import { AddressZero, MaxUint256, ONE_ETH, paymasterStake, TWO_ETH, unstakeDelaySec } from "./constants";
 import { revertToSnapShot, takeSnapshot } from "./helper";
 import { createWallet, getContractWalletInfo, getPaymasterSignHash, signPaymasterHash, signUserOp } from "./utils";
 
@@ -154,7 +154,7 @@ describe("EntryPoint with Verifying Paymaster", () => {
     userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
 
     await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
-      "VerifyingPaymaster: Unsupported operation",
+      "VerifyingPaymaster: operation not in sponsored operation",
     );
   });
 
@@ -190,7 +190,46 @@ describe("EntryPoint with Verifying Paymaster", () => {
 
     //reverted with "VerifyingPaymaster: Unsupported operation"
     await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
-      "VerifyingPaymaster: Unsupported operation",
+      "VerifyingPaymaster: operation not in sponsored operation",
+    );
+  });
+
+  it("Should directly transfer ETH through paymaster fail", async () => {
+    let simpleWalletCreateSalt = 0;
+    const contractWallet = await getContractWalletInfo(
+      simpleWalletCreateSalt,
+      entryPoint.address,
+      walletOwner.address,
+      walletFactory.address,
+    );
+
+    const recipient = signers[5];
+    const recipientAddress = await recipient.getAddress();
+
+    await sponsor.sendTransaction({
+      to: contractWallet.address,
+      value: TWO_ETH,
+    });
+
+    let userOp = new UserOperation();
+    userOp.sender = contractWallet.address;
+    userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
+    userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+    userOp.paymaster = paymaster.address;
+    userOp.initCode = contractWallet.initCode;
+    userOp.nonce = 0;
+
+    userOp.callData = walletInterface.encodeFunctionData("execFromEntryPoint", [recipientAddress, ONE_ETH, "0x"]);
+    await userOp.estimateGas(hardhatProvider, entryPoint.address);
+
+    const paymasterSignHash = getPaymasterSignHash(userOp);
+    userOp.paymasterData = signPaymasterHash(paymasterSignHash, offChainSigner.privateKey);
+
+    const chainId = (await hardhatProvider.getNetwork()).chainId;
+    userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
+
+    await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
+      "VerifyingPaymaster: operation not in sponsored operation",
     );
   });
 });
