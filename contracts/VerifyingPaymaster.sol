@@ -88,24 +88,22 @@ contract VerifyingPaymaster is BasePaymaster {
             verifyingSigner == hash.toEthSignedMessageHash().recover(userOp.paymasterData),
             "VerifyingPaymaster: wrong signature"
         );
-        require(this._validateCallData(userOp.callData), "VerifyingPaymaster: Unsupported operation");
-
+        require(this._validateCallData(userOp.callData), "VerifyingPaymaster: operation not in sponsored operation");
         //no need for other on-chain validation: entire UserOp should have been checked
         // by the external service prior to signing it.
         return "";
     }
 
     function _validateCallData(bytes calldata opCallData) external view onlySelf returns (bool) {
+        // The opCallDataLength should be the same with approveOperation
+        if (opCallData.length != 228) return false;
         bytes4 funcSelector = bytes4(opCallData[132:136]);
         bytes calldata destData = opCallData[4:36];
         address dest = abi.decode(destData, (address));
-        if (funcSelector == APPROVE_FUNCTION_SELECTOR) {
-            if (dest != token) return false;
-            bytes memory approveParam = opCallData[136:];
-            (address spender, ) = abi.decode(approveParam, (address, uint256));
-            if (spender != mainPaymaster) return false;
-            return true;
-        }
+        if (dest != token) return false;
+        bytes memory approveParam = opCallData[136:200];
+        (address spender, ) = abi.decode(approveParam, (address, uint256));
+        if (funcSelector == APPROVE_FUNCTION_SELECTOR && spender == mainPaymaster) return true;
         return false;
     }
 

@@ -23,7 +23,6 @@ let counter = 0;
 export function createWallet(): Wallet {
   const privateKey = keccak256(Buffer.from(arrayify(BigNumber.from(++counter))));
   return new ethers.Wallet(privateKey, ethers.provider);
-  // return new ethers.Wallet('0x'.padEnd(66, privkeyBase), ethers.provider);
 }
 
 const numberToBytes32Hex = (number: number): string => hexZeroPad(hexlify(number), 32);
