@@ -16,7 +16,6 @@ import {
   WalletProxy__factory,
 } from "../types";
 import { UserOperation } from "./entity/userOperation";
-import { fillAndSign } from "./UserOp";
 import { AddressZero } from "./utils/const";
 import { getPayMasterSignHash, signPayMasterHash, signUserOp } from "./utils/UserOp";
 const { expect } = use(chaiAsPromised);
@@ -192,24 +191,29 @@ describe("Wallet testing", () => {
     await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
     await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
     await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
-    await depositPaymaster.lockTokenDeposit();
+    // await depositPaymaster.lockTokenDeposit();
     let callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
       maskToken.address,
       0,
       (await maskToken.populateTransaction.approve(verifyingPaymaster.address, constants.MaxUint256)).data,
     ]);
-    let userOp2 = await fillAndSign(
-      {
-        sender: walletProxyAddress,
-        paymaster: depositPaymaster.address,
-        paymasterData: utils.hexZeroPad(maskToken.address, 32),
-        callData: callData,
-      },
-      userSigner,
-      entryPoint,
-    );
-    result = await entryPointStatic.callStatic.simulateValidation(userOp2);
+    userOp.nonce = await walletLogic.nonce();
+    userOp.paymaster = depositPaymaster.address;
+    userOp.paymasterData = utils.hexZeroPad(maskToken.address, 32);
+    userOp.callData = callData;
+    userOp.signature = signUserOp(userOp, entryPoint.address, chainId, userPrivateKey);
+    // let userOp2 = await fillAndSign(
+    //   {
+    //     sender: walletProxyAddress,
+    //     paymaster: depositPaymaster.address,
+    //     paymasterData: utils.hexZeroPad(maskToken.address, 32),
+    //     callData: callData,
+    //   },
+    //   userSigner,
+    //   entryPoint,
+    // );
+    result = await entryPointStatic.callStatic.simulateValidation(userOp);
     console.log(result);
-    await entryPoint.handleOps([userOp2], beneficialAccountAddress);
+    await entryPoint.handleOps([userOp], beneficialAccountAddress);
   });
 });

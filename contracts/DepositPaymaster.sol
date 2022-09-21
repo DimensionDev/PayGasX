@@ -30,7 +30,7 @@ contract DepositPaymaster is BasePaymaster {
     uint256 public constant COST_OF_POST = 35000;
 
     //paytoken to eth ratio
-    uint256 public PAYTOKEN_TO_ETH_RATIO = 1000;
+    uint256 public PAYTOKEN_TO_ETH_RATIO = 1500;
 
     IERC20 public payToken;
 
@@ -42,28 +42,19 @@ contract DepositPaymaster is BasePaymaster {
      */
     constructor(EntryPoint _entryPoint, address _payToken) BasePaymaster(_entryPoint) {
         //owner account is unblocked, to allow withdraw of paid tokens;
-        unlockTokenDeposit();
+        //unlockTokenDeposit();
         payToken = IERC20(_payToken);
     }
 
     /**
-     * deposit tokens that a specific account can use to pay for gas.
-     * The sender must first approve this paymaster to withdraw these tokens (they are only withdrawn in this method).
-     * Note depositing the tokens is equivalent to transferring them to the "account" - only the account can later
-     *  use them - either as gas, or using withdrawTo()
-     * call by sponsor
-     *
+     * deposit for an account
      * @param account the account to deposit for.
      * @param amount the amount of token to deposit.
      */
-    function addDepositFor(address account, uint256 amount) external {
+    function addDepositFor(address account, uint256 amount) external onlyOwner {
         //(sender must have approval for the paymaster)
         payToken.safeTransferFrom(msg.sender, address(this), amount);
-
         balances[account] += amount;
-        if (msg.sender == account) {
-            lockTokenDeposit();
-        }
     }
 
     function depositInfo(address account) public view returns (uint256 amount, uint256 _unlockBlock) {
@@ -72,33 +63,13 @@ contract DepositPaymaster is BasePaymaster {
     }
 
     /**
-     * unlock deposit, so that it can be withdrawn.
-     * can't be called in the same block as withdrawTo()
-     */
-    function unlockTokenDeposit() public {
-        unlockBlock[msg.sender] = block.number;
-    }
-
-    /**
-     * lock the tokens deposited for this account so they can be used to pay for gas.
-     * after calling unlockTokenDeposit(), the account can't use this paymaster until the deposit is locked.
-     */
-    function lockTokenDeposit() public {
-        unlockBlock[msg.sender] = 0;
-    }
-
-    /**
      * withdraw tokens.
-     * can only be called after unlock() is called in a previous block.
+     *
      * @param target address to send to
      * @param amount amount to withdraw
      */
-    function withdrawTokensTo(address target, uint256 amount) public {
-        require(
-            unlockBlock[msg.sender] != 0 && block.number > unlockBlock[msg.sender],
-            "DepositPaymaster: must unlockTokenDeposit"
-        );
-        balances[msg.sender] -= amount;
+    function withdrawTokensTo(address target, uint256 amount) public onlyOwner {
+        balances[target] -= amount;
         payToken.safeTransfer(target, amount);
     }
 
@@ -116,11 +87,10 @@ contract DepositPaymaster is BasePaymaster {
     }
 
     /**
-     * given the estimate gas cost base on the UserOperation
+     * given the estimate gas cost, base on the UserOperation and specific token to eth ratio
      */
     function estimateCost(UserOperation calldata userOp) public view returns (uint256 amount) {
-        uint256 requiredPrefund = userOp.requiredPreFund();
-        return requiredPrefund;
+        return PAYTOKEN_TO_ETH_RATIO * userOp.requiredPreFund();
     }
 
     /**
@@ -163,6 +133,7 @@ contract DepositPaymaster is BasePaymaster {
         (address account, uint256 maxTokenCost, uint256 maxCost) = abi.decode(context, (address, uint256, uint256));
         //use same conversion rate as used for validation.
         uint256 actualTokenCost = ((actualGasCost + COST_OF_POST) * maxTokenCost) / maxCost;
+
         if (mode != PostOpMode.postOpReverted) {
             // attempt to pay with tokens:
             payToken.safeTransferFrom(account, address(this), actualTokenCost);

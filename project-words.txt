@@ -29,6 +29,7 @@ reentrancy
 Singletonfactory
 snakecase
 solhint
+solstack
 typechain
 unstake
 xdai

@@ -67,10 +67,10 @@ class UserOperation {
 
   /**
    * update callGas
-   * @param web3 web3 instance
+   * @param provider ethers provider
    * @param entryPointAddress entry point address
    */
-  private async estimateCallGas(provider: providers.JsonRpcProvider, entryPointAddress: string) {
+  private async estimateCallGas(provider: providers.Provider, entryPointAddress: string) {
     const calldata: string = this.callData as string;
     const estimatedGas =
       (
@@ -85,10 +85,10 @@ class UserOperation {
 
   /**
    * update Gas
-   * @param web3 web3 instance
+   * @param provider ethers provider
    * @param entryPointAddress entry point address
    */
-  public async estimateGas(provider: providers.JsonRpcProvider, entryPointAddress: string) {
+  public async estimateGas(provider: providers.Provider, entryPointAddress: string) {
     this.estimateVerificationGas();
     await this.estimateCallGas(provider, entryPointAddress);
   }

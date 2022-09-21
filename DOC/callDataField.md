@@ -19,3 +19,17 @@
 - `bytes func`: the data to be handled by target contract. Check [how dynamic type is used in parameter](https://docs.soliditylang.org/en/v0.8.11/abi-spec.html#use-of-dynamic-types).
 
 **Note**: The parameters are padded to 32 bytes.
+
+## Example Case For ERC20 `approve()`
+
+| Offset | Field                             | Block Size | Note                                      |
+| ------ | --------------------------------- | ---------- | ----------------------------------------- |
+| 0      | `execFromEntryPoint()` fs\*       | 4          |                                           |
+| 4      | destination address               | 32         | 1st param                                 |
+| 36     | `msg.value` to send               | 32         | 2nd param                                 |
+| 68     | location of data of `func`        | 32         | 3rd param                                 |
+| 100    | number of element of bytes `func` | 32         | 3rd param                                 |
+| 132    | `approve()` function selector     | 4          | target call func                          |
+| 136    | spender address                   | 32         | 1st param of `approve`                    |
+| 168    | approve amount                    | 32         | 2nd param of `approve`                    |
+| 200    | padding                           | 28         | padding the last data section to 32 bytes |
