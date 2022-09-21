@@ -14,9 +14,7 @@ contract WalletProxy is ERC1967Proxy {
         address _owner,
         address _logic,
         bytes memory _data
-    ) payable ERC1967Proxy(_logic, _data) {
-        _changeAdmin(_owner);
-    }
+    ) payable ERC1967Proxy(_logic, _data) {}
 
     function upgradeToAndCall(
         address _newImplementation,
