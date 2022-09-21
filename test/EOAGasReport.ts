@@ -1,8 +1,8 @@
 import { ethers, waffle } from "hardhat";
 import { MaskToken, MaskToken__factory, TESTNFT__factory } from "../types";
-import "./aa.init";
 
-import { createAddress, createWalletOwner, TWO_ETH } from "./util";
+import { TWO_ETH } from "./constants";
+import { createWallet } from "./utils";
 
 const { deployContract } = waffle;
 
@@ -14,7 +14,7 @@ describe("#gasReport", () => {
   before(async function () {
     maskToken = await new MaskToken__factory(ethersSigner).deploy();
 
-    wallet = createWalletOwner();
+    wallet = createWallet();
 
     ethersSigner.sendTransaction({
       to: wallet.address,
@@ -35,7 +35,7 @@ describe("#gasReport", () => {
   it("should export 4337 mint an NFT gas", async () => {
     const testNft = await new TESTNFT__factory(ethersSigner).deploy();
 
-    await testNft.connect(wallet).mint(createAddress());
+    await testNft.connect(wallet).mint(createWallet().address);
   });
 
   it("should export 4337 claim an red packet gas", async () => {});

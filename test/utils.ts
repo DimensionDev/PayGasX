@@ -12,6 +12,10 @@ import {
 import { ethers } from "hardhat";
 import { UserOperation } from "../Objects/userOperation";
 
+import { utils } from "ethers";
+import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
+import { SimpleWalletUpgradeable, SimpleWalletUpgradeable__factory, WalletProxy__factory } from "../types";
+
 export interface ContractWalletInfo {
   address: string;
   initCode: BytesLike;
@@ -169,3 +173,26 @@ export const getContractWalletInfo = async (
     initCode,
   };
 };
+
+export async function deployWallet(
+  entryPointAddress,
+  ownerAddress,
+  signer = ethers.provider.getSigner(),
+): Promise<SimpleWalletUpgradeable> {
+  const walletLogicContract = await new SimpleWalletUpgradeable__factory(signer).deploy();
+
+  const simpleWalletInterface = new utils.Interface(SimpleWalletArtifact.abi);
+  const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPointAddress, ownerAddress]);
+
+  const wallet = await new WalletProxy__factory(signer).deploy(ownerAddress, walletLogicContract.address, data);
+
+  await wallet.deployed();
+
+  //not use hardhat-upgrade in case we should modify proxy shell itself
+  const walletContract: SimpleWalletUpgradeable = new ethers.Contract(
+    wallet.address,
+    SimpleWalletArtifact.abi,
+    signer,
+  ) as SimpleWalletUpgradeable;
+  return walletContract;
+}
