@@ -28,6 +28,24 @@ Contract wallet is deployed for PayGasX users to help them manage their ERC20 as
 
 - API of [`EntryPoint`](DOC/EntryPointAPI.md)
 
+## GasReport
+
+#### gas report (deploy)
+
+1. SimpleWallet : 970841
+2. SimpleWalletUpgradeable(one time): 1012766
+3. ERC1967 Proxy Wallet: 503475
+
+#### gas report (usage)
+
+|                                  | 4337 wallet | EOA wallet |
+| -------------------------------- | ----------- | ---------- |
+| transfer Ether (direct by owner) | 63645       | 21000      |
+| transfer ether(by entry point)   | 164231      | 21000      |
+| approve erc20 token              | 196146      | 46196      |
+| transfer erc20 token             | 156232      | 51602      |
+| mint an NFT                      | 205348      | 93527      |
+
 ## Contribute
 
 Any contribution is welcomed to make it better.

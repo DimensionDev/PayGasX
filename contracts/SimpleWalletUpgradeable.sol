@@ -6,6 +6,8 @@ import "./BaseWallet.sol";
 import "./lib/ECDSA.sol";
 import "./lib/UserOperation.sol";
 import "./EntryPoint.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/utils/StorageSlot.sol";
 import "hardhat/console.sol";
 
 /* solhint-disable avoid-low-level-calls */
@@ -18,16 +20,21 @@ import "hardhat/console.sol";
  *  has a single signer that can send requests through the entryPoint.
  */
 
-contract SimpleWallet is BaseWallet {
+contract SimpleWalletUpgradeable is BaseWallet, Initializable {
     using ECDSA for bytes32;
     using UserOperationLib for UserOperation;
 
-    //explicit sizes of nonce, to fit a single storage cell with "owner"
+    // from ERC1967, so proxy and logic contract share the same owner variable
+    bytes32 internal constant _ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
+
     uint96 private _nonce;
-    address public owner;
 
     function nonce() public view virtual override returns (uint256) {
         return _nonce;
+    }
+
+    function owner() public view virtual returns (address) {
+        return _getAdmin();
     }
 
     function entryPoint() public view virtual override returns (EntryPoint) {
@@ -41,9 +48,10 @@ contract SimpleWallet is BaseWallet {
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
 
-    constructor(EntryPoint anEntryPoint, address anOwner) {
+    function initialize(EntryPoint anEntryPoint, address anOwner) public initializer {
         _entryPoint = anEntryPoint;
-        owner = anOwner;
+        // set by proxy constructor
+        _setAdmin(anOwner);
     }
 
     modifier onlyOwner() {
@@ -53,7 +61,22 @@ contract SimpleWallet is BaseWallet {
 
     function _onlyOwner() internal view {
         //directly from EOA owner, or through the entryPoint (which gets redirected through execFromEntryPoint)
-        require(msg.sender == owner || msg.sender == address(this), "only owner");
+        require(msg.sender == owner() || msg.sender == address(this), "only owner");
+    }
+
+    /**
+     * @dev Returns the current admin.
+     */
+    function _getAdmin() internal view returns (address) {
+        return StorageSlot.getAddressSlot(_ADMIN_SLOT).value;
+    }
+
+    /**
+     * @dev Stores a new address in the EIP1967 admin slot.
+     */
+    function _setAdmin(address newAdmin) private {
+        require(newAdmin != address(0), "SimpleWallet: new admin is the zero address");
+        StorageSlot.getAddressSlot(_ADMIN_SLOT).value = newAdmin;
     }
 
     /**
@@ -128,7 +151,7 @@ contract SimpleWallet is BaseWallet {
     /// implement template method of BaseWallet
     function _validateSignature(UserOperation calldata userOp, bytes32 requestId) internal view override {
         bytes32 hash = requestId.toEthSignedMessageHash();
-        require(owner == hash.recover(userOp.signature), "wallet: wrong signature");
+        require(owner() == hash.recover(userOp.signature), "wallet: wrong signature");
     }
 
     function _call(
