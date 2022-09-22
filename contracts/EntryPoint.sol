@@ -7,6 +7,7 @@ import "./interface/IPaymaster.sol";
 import "./interface/ICreate2Deployer.sol";
 import "./StakeManager.sol";
 import "./lib/UserOperation.sol";
+import "hardhat/console.sol";
 
 /**
  ** Account-Abstraction (EIP-4337) singleton EntryPoint implementation.
@@ -109,7 +110,6 @@ contract EntryPoint is StakeManager {
     function handleOps(UserOperation[] calldata ops, address payable beneficiary) public {
         uint256 opslen = ops.length;
         UserOpInfo[] memory opInfos = new UserOpInfo[](opslen);
-
         unchecked {
             for (uint256 i = 0; i < opslen; i++) {
                 uint256 preGas = gasleft();
@@ -132,7 +132,6 @@ contract EntryPoint is StakeManager {
                     preGas - gasleft() + op.preVerificationGas
                 );
             }
-
             uint256 collected = 0;
 
             for (uint256 i = 0; i < ops.length; i++) {
@@ -152,7 +151,6 @@ contract EntryPoint is StakeManager {
                     collected += _handlePostOp(i, IPaymaster.PostOpMode.postOpReverted, op, opInfo, context, actualGas);
                 }
             }
-
             _compensate(beneficiary, collected);
         } //unchecked
     }
@@ -223,7 +221,6 @@ contract EntryPoint is StakeManager {
         bytes32 requestId = getRequestId(userOp);
         (prefund, , ) = _validatePrepayment(0, userOp, requestId);
         preOpGas = preGas - gasleft() + userOp.preVerificationGas;
-
         require(msg.sender == address(0), "must be called off-chain with from=zero-addr");
     }
 
@@ -385,7 +382,6 @@ contract EntryPoint is StakeManager {
         // (used only by off-chain simulateValidation)
         uint256 marker = block.number;
         (marker);
-
         if (paymentMode == PaymentMode.paymasterDeposit) {
             (context) = _validatePaymasterPrepayment(
                 opIndex,

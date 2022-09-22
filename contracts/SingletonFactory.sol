@@ -1,23 +1,32 @@
-pragma solidity ^0.8.0;
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.7;
+import "hardhat/console.sol";
 
 /**
  * @title Singleton Factory (EIP-2470)
- * @notice Exposes CREATE2 (EIP-1014) to deploy bytecode on deterministic addresses.
+ * @dev Extended version from EIP-2470 for testing purposes
  * @author Ricardo Guilherme Schmidt (Status Research & Development GmbH)
  */
 contract SingletonFactory {
+    address public lastDeployedContract;
+    event Deployed(address createdContract, bytes32 salt);
+
     /**
-     * @notice Deploys `_initCode` using `_salt` for defining the deterministic address.
-     * @param _initCode Initialization code.
-     * @param _salt Arbitrary value to modify resulting address.
+     * @notice Deploys `initCode` using `salt` for defining the deterministic address.
+     * @param initCode Initialization code.
+     * @param salt Arbitrary value to modify resulting address.
      * @return createdContract Created contract address.
      */
-    function deploy(bytes memory _initCode, bytes32 _salt) public returns (address payable createdContract) {
+    function deploy(bytes memory initCode, bytes32 salt) public returns (address payable createdContract) {
+        // solhint-disable-next-line no-inline-assembly
         assembly {
-            createdContract := create2(0, add(_initCode, 0x20), mload(_initCode), _salt)
-            if iszero(extcodesize(createdContract)) {
-                revert(0, 0)
-            }
+            createdContract := create2(0, add(initCode, 0x20), mload(initCode), salt)
         }
+
+        console.log(">>>>>>>>>>>>>>>>>>SingletonFactory create2 address: ", createdContract);
+        require(createdContract != address(0), "SingletonFactory: Create2 failed");
+        lastDeployedContract = createdContract;
+        emit Deployed(createdContract, salt);
     }
 }
