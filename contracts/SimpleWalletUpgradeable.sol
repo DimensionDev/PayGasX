@@ -190,4 +190,22 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable {
     function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlyOwner {
         entryPoint().withdrawTo(withdrawAddress, amount);
     }
+
+    // implementers that wallet needs to support
+
+    /**
+     * ERC721 assets receiver
+     */
+    function onERC721Received(
+        address _operator,
+        address _from,
+        uint256 _tokenId,
+        bytes calldata _data
+    ) public pure returns (bytes4) {
+        _operator;
+        _from;
+        _tokenId;
+        _data;
+        return 0x150b7a02;
+    }
 }
