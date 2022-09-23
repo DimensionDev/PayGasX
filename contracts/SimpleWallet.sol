@@ -6,7 +6,6 @@ import "./BaseWallet.sol";
 import "./lib/ECDSA.sol";
 import "./lib/UserOperation.sol";
 import "./EntryPoint.sol";
-import "hardhat/console.sol";
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */

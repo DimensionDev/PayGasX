@@ -30,7 +30,7 @@ Singletonfactory
 snakecase
 solhint
 solstack
+TESTNFT
 typechain
 unstake
 xdai
-keccak

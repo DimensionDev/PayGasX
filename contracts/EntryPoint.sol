@@ -2,12 +2,11 @@
 
 pragma solidity ^0.8.12;
 
-import "./interface/IWallet.sol";
-import "./interface/IPaymaster.sol";
-import "./interface/ICreate2Deployer.sol";
+import "./interfaces/IWallet.sol";
+import "./interfaces/IPaymaster.sol";
+import "./interfaces/ICreate2Deployer.sol";
 import "./StakeManager.sol";
 import "./lib/UserOperation.sol";
-import "hardhat/console.sol";
 
 /**
  ** Account-Abstraction (EIP-4337) singleton EntryPoint implementation.

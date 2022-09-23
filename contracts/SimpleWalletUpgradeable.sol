@@ -8,7 +8,6 @@ import "./lib/UserOperation.sol";
 import "./EntryPoint.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/StorageSlot.sol";
-import "hardhat/console.sol";
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
