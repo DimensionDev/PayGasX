@@ -8,17 +8,26 @@
 
 ## Usage Gas Report
 
+### ERC20 Related Operation
+
 <!-- begin Wallet -->
 
 |                | EOA Wallet | 4337 Wallet without EP | 4337 Wallet with EP |
 | -------------- | :--------: | :--------------------: | :-----------------: |
-| Transfer ETH   |   21000    |         63667          |       140264        |
-| Approve ERC20  |   46196    |         58392          |       117517        |
-| Transfer ERC20 |   51542    |         63666          |       122559        |
-| Mint ERC721    |   93527    |         88405          |       147188        |
+| Transfer ETH   |   21000    |         63667          |       140244        |
+| Approve ERC20  |   46196    |         58704          |       117525        |
+| Transfer ERC20 |   51542    |         63678          |       122551        |
+| Mint ERC721    |   93527    |         88393          |       147208        |
 
 <!-- end Wallet -->
 
+### Redpacket Related Operation
+
 <!-- begin Paymaster -->
+
+|        | EOA Wallet | 4337 Wallet with Paymaster |
+| ------ | :--------: | :------------------------: |
+| create |   149930   |           304920           |
+| claim  |   88238    |           191117           |
 
 <!-- end Paymaster -->

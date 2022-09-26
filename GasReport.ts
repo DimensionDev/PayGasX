@@ -1,17 +1,29 @@
 import { Signer, Wallet } from "ethers";
-import { parseEther, parseUnits } from "ethers/lib/utils";
+import { arrayify, hexZeroPad, parseEther, parseUnits } from "ethers/lib/utils";
 import fs from "fs/promises";
 import { ethers, network } from "hardhat";
 import path from "path";
 import { format } from "prettier";
 import { UserOperation } from "./Objects/userOperation";
-import { AddressZero, FIVE_ETH, MaxUint256, ONE_ETH, paymasterStake, TWO_ETH, unstakeDelaySec } from "./test/constants";
+import {
+  AddressZero,
+  creationParams,
+  FIVE_ETH,
+  MaxUint256,
+  ONE_ETH,
+  paymasterStake,
+  testPrivateKey,
+  TWO_ETH,
+  unstakeDelaySec,
+} from "./test/constants";
 import { createWallet, deployWallet, signUserOp } from "./test/utils";
 import {
   DepositPaymaster,
   DepositPaymaster__factory,
   EntryPoint,
   EntryPoint__factory,
+  HappyRedPacket,
+  HappyRedPacket__factory,
   MaskToken,
   MaskToken__factory,
   SimpleWalletUpgradeable,
@@ -28,6 +40,11 @@ type GasResult = {
   ERC721Mint: string;
 };
 
+type RPGasResult = {
+  createRP: string;
+  claimRP: string;
+};
+
 const README_PATH = path.resolve(__dirname, "DOC", "GasReport.md");
 let chainId = network.config.chainId!;
 let sponsor: Signer;
@@ -41,6 +58,7 @@ let walletOwner: Wallet;
 let entryPoint: EntryPoint;
 let paymaster: DepositPaymaster;
 let contractWallet: SimpleWalletUpgradeable;
+let redPacket: HappyRedPacket;
 
 async function main() {
   const content = await fs.readFile(README_PATH, "utf-8");
@@ -48,10 +66,17 @@ async function main() {
   const eoaGasResult = await getEOAGasResult();
   const scWalletGasResult = await get4337WalletGasResultWithoutEP();
   const scWalletGasResultWithEP = await get4337WalletGasResultWithEP();
-  const replaced = replace(
+  const scWalletRPResultWithPaymaster = await getRedpacket4337GasWithPaymaster();
+  const eoaRPResult = await getRPEoaResult();
+  let replaced = replace(
     content,
     Array.from(makeTable(eoaGasResult, scWalletGasResult, scWalletGasResultWithEP)).filter(Boolean).join("\n"),
     "Wallet",
+  );
+  replaced = replace(
+    replaced,
+    Array.from(makeRPTable(eoaRPResult, scWalletRPResultWithPaymaster)).filter(Boolean).join("\n"),
+    "Paymaster",
   );
   const formatted = format(replaced, {
     parser: "markdown",
@@ -70,6 +95,13 @@ function* makeTable(eoaGasResult: GasResult, scWalletGasResult: GasResult, scWal
   yield `| Approve ERC20 | ${eoaGasResult.Approve}| ${scWalletGasResult.Approve} | ${scWalletGasResultWithEP.Approve} |`;
   yield `| Transfer ERC20 | ${eoaGasResult.ERC20Transfer}| ${scWalletGasResult.ERC20Transfer} | ${scWalletGasResultWithEP.ERC20Transfer} |`;
   yield `| Mint ERC721 | ${eoaGasResult.ERC721Mint}| ${scWalletGasResult.ERC721Mint} | ${scWalletGasResultWithEP.ERC721Mint} |`;
+}
+
+function* makeRPTable(eoaGasResult: RPGasResult, scWalletGasResultWithPaymaster: RPGasResult) {
+  yield "|  | EOA Wallet | 4337 Wallet with Paymaster |";
+  yield "| - | :-: | :-: |";
+  yield `| create | ${eoaGasResult.createRP}| ${scWalletGasResultWithPaymaster.createRP} |`;
+  yield `| claim | ${eoaGasResult.claimRP}| ${scWalletGasResultWithPaymaster.claimRP} |`;
 }
 
 function replace(content: string, replace: string, section: string) {
@@ -105,7 +137,7 @@ async function get4337WalletGasResultWithoutEP(): Promise<GasResult> {
   const transferEthTx = await contractWallet.connect(walletOwner).transfer(createWallet().address, ONE_ETH);
   const transferEthReceipt = await ethers.provider.getTransactionReceipt(transferEthTx.hash);
 
-  const execApprove = maskToken.interface.encodeFunctionData("approve", [createWallet().address, ONE_ETH]);
+  const execApprove = maskToken.interface.encodeFunctionData("approve", [redPacket.address, MaxUint256]);
   const approveTx = await contractWallet.connect(walletOwner).exec(maskToken.address, 0, execApprove);
   const approveReceipt = await ethers.provider.getTransactionReceipt(approveTx.hash);
 
@@ -145,7 +177,7 @@ async function get4337WalletGasResultWithEP(): Promise<GasResult> {
   //#region approve ERC20 via EntryPoint
   let approveUserOp = createDefaultUserOp(contractWallet.address);
   approveUserOp.nonce = await contractWallet.nonce();
-  const execApprove = maskToken.interface.encodeFunctionData("approve", [createWallet().address, MaxUint256]);
+  const execApprove = maskToken.interface.encodeFunctionData("approve", [paymaster.address, MaxUint256]);
   approveUserOp.callData = contractWallet.interface.encodeFunctionData("execFromEntryPoint", [
     maskToken.address,
     0,
@@ -226,6 +258,104 @@ async function setUp() {
     to: contractWallet.address,
     value: FIVE_ETH,
   });
+
+  redPacket = await new HappyRedPacket__factory(ethersSigner).deploy();
+}
+
+async function getRedpacket4337GasWithPaymaster(): Promise<RPGasResult> {
+  const beneficiaryAddress = await sponsor.getAddress();
+  await paymaster.addDepositFor(contractWallet.address, ONE_ETH);
+  //#region create Redpacket user operation
+  let createRpUserOp = createDefaultUserOp(contractWallet.address);
+  createRpUserOp.paymaster = paymaster.address;
+  createRpUserOp.paymasterData = hexZeroPad(maskToken.address, 32);
+  createRpUserOp.nonce = await contractWallet.nonce();
+
+  const createRpData = redPacket.interface.encodeFunctionData("create_red_packet", [
+    creationParams.publicKey,
+    creationParams.number,
+    creationParams.ifrandom,
+    creationParams.duration,
+    creationParams.seed,
+    creationParams.message,
+    creationParams.name,
+    1,
+    maskToken.address,
+    creationParams.totalTokens,
+  ]);
+
+  createRpUserOp.callData = contractWallet.interface.encodeFunctionData("execFromEntryPoint", [
+    redPacket.address,
+    0,
+    createRpData,
+  ]);
+  await createRpUserOp.estimateGas(ethers.provider, entryPoint.address);
+
+  createRpUserOp.signature = signUserOp(createRpUserOp, entryPoint.address, chainId, walletOwner.privateKey);
+  const createRpTx = await entryPoint.connect(sponsor).handleOps([createRpUserOp], beneficiaryAddress);
+  const createRPReceipt = await ethers.provider.getTransactionReceipt(createRpTx.hash);
+  const createSuccess = (await redPacket.queryFilter(redPacket.filters.CreationSuccess()))[0];
+  if (!createSuccess) throw Error("Create redpacket fail");
+  const pktId = createSuccess?.args.id;
+  //#endregion
+
+  //#region claim
+  let claimRpUserOp = createDefaultUserOp(contractWallet.address);
+  claimRpUserOp.paymaster = paymaster.address;
+  claimRpUserOp.paymasterData = hexZeroPad(maskToken.address, 32);
+  claimRpUserOp.nonce = await contractWallet.nonce();
+
+  const testWallet = new Wallet(testPrivateKey);
+  const claimSignedMsg = await testWallet.signMessage(arrayify(contractWallet.address));
+
+  const claimRpData = redPacket.interface.encodeFunctionData("claim", [pktId, claimSignedMsg, contractWallet.address]);
+
+  claimRpUserOp.callData = contractWallet.interface.encodeFunctionData("execFromEntryPoint", [
+    redPacket.address,
+    0,
+    claimRpData,
+  ]);
+  await claimRpUserOp.estimateGas(ethers.provider, entryPoint.address);
+
+  claimRpUserOp.signature = signUserOp(claimRpUserOp, entryPoint.address, chainId, walletOwner.privateKey);
+  const claimRpTx = await entryPoint.connect(sponsor).handleOps([claimRpUserOp], beneficiaryAddress);
+  const claimRPReceipt = await ethers.provider.getTransactionReceipt(claimRpTx.hash);
+  //#endregion
+
+  return {
+    createRP: createRPReceipt.gasUsed.toString(),
+    claimRP: claimRPReceipt.gasUsed.toString(),
+  };
+}
+
+async function getRPEoaResult(): Promise<RPGasResult> {
+  const beneficiaryAddress = await sponsor.getAddress();
+  await maskToken.connect(ethersSigner).transfer(beneficiaryAddress, FIVE_ETH);
+  const createRPParam = {
+    ...creationParams,
+    tokenType: 1,
+    tokenAddr: maskToken.address,
+  };
+  await maskToken.connect(sponsor).approve(redPacket.address, MaxUint256);
+  const createRpTx = await redPacket.connect(sponsor).create_red_packet.apply(null, Object.values(createRPParam));
+  const createRpReceipt = await ethers.provider.getTransactionReceipt(createRpTx.hash);
+  const createSuccess = (await redPacket.queryFilter(redPacket.filters.CreationSuccess()))[0];
+  if (!createSuccess) throw Error("Create redpacket fail");
+  const pktId = createSuccess?.args.id;
+
+  const testWallet = new Wallet(testPrivateKey);
+  const claimSignedMsg = await testWallet.signMessage(arrayify(beneficiaryAddress));
+  const claimParam = {
+    id: pktId,
+    signedMsg: claimSignedMsg,
+    recipient: beneficiaryAddress,
+  };
+  const claimRpTx = await redPacket.connect(sponsor).claim.apply(null, Object.values(claimParam));
+  const claimRpReceipt = await ethers.provider.getTransactionReceipt(claimRpTx.hash);
+  return {
+    createRP: createRpReceipt.gasUsed.toString(),
+    claimRP: claimRpReceipt.gasUsed.toString(),
+  };
 }
 
 function createDefaultUserOp(sender: string): UserOperation {
