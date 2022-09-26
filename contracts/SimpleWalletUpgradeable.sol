@@ -8,6 +8,7 @@ import "./lib/UserOperation.sol";
 import "./EntryPoint.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/StorageSlot.sol";
+import "@gnosis.pm/safe-contracts/contracts/handler/DefaultCallbackHandler.sol";
 import "hardhat/console.sol";
 
 /* solhint-disable avoid-low-level-calls */
@@ -20,7 +21,7 @@ import "hardhat/console.sol";
  *  has a single signer that can send requests through the entryPoint.
  */
 
-contract SimpleWalletUpgradeable is BaseWallet, Initializable {
+contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHandler {
     using ECDSA for bytes32;
     using UserOperationLib for UserOperation;
 
@@ -189,23 +190,5 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable {
      */
     function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlyOwner {
         entryPoint().withdrawTo(withdrawAddress, amount);
-    }
-
-    // implementers that wallet needs to support
-
-    /**
-     * ERC721 assets receiver
-     */
-    function onERC721Received(
-        address _operator,
-        address _from,
-        uint256 _tokenId,
-        bytes calldata _data
-    ) public pure returns (bytes4) {
-        _operator;
-        _from;
-        _tokenId;
-        _data;
-        return 0x150b7a02;
     }
 }
