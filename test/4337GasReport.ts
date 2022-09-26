@@ -142,7 +142,7 @@ describe("#gasReport", () => {
   it("should export 4337 mint an NFT gas", async () => {
     const testNft = await new TESTNFT__factory(contractCreator).deploy();
 
-    const calldata = await testNft.populateTransaction.mint(createWallet().address).then((tx) => tx.data!);
+    const calldata = await testNft.populateTransaction.mint(createWallet().address, 1).then((tx) => tx.data!);
     const exec = await wallet.populateTransaction
       .execFromEntryPoint(testNft.address, 0, calldata)
       .then((tx) => tx.data!);
