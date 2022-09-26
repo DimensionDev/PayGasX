@@ -8,6 +8,8 @@ import "./lib/UserOperation.sol";
 import "./EntryPoint.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/StorageSlot.sol";
+import "@gnosis.pm/safe-contracts/contracts/handler/DefaultCallbackHandler.sol";
+import "hardhat/console.sol";
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
@@ -19,7 +21,7 @@ import "@openzeppelin/contracts/utils/StorageSlot.sol";
  *  has a single signer that can send requests through the entryPoint.
  */
 
-contract SimpleWalletUpgradeable is BaseWallet, Initializable {
+contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHandler {
     using ECDSA for bytes32;
     using UserOperationLib for UserOperation;
 

@@ -119,7 +119,7 @@ async function getEOAGasResult(): Promise<GasResult> {
   const approveReceipt = await ethers.provider.getTransactionReceipt(approveTx.hash);
   const transferTx = await maskToken.connect(ethersSigner).transfer(testWallet.address, 1);
   const transferReceipt = await ethers.provider.getTransactionReceipt(transferTx.hash);
-  const mintTx = await testNft.connect(ethersSigner).mint(createWallet().address);
+  const mintTx = await testNft.connect(ethersSigner).mint(createWallet().address, 1);
   const mintReceipt = await ethers.provider.getTransactionReceipt(mintTx.hash);
   return {
     TransferEther: transferEthReceipt.gasUsed.toString(),
@@ -145,7 +145,7 @@ async function get4337WalletGasResultWithoutEP(): Promise<GasResult> {
   const transfer20Tx = await contractWallet.connect(walletOwner).exec(maskToken.address, 0, execTransfer);
   const transfer20Receipt = await ethers.provider.getTransactionReceipt(transfer20Tx.hash);
 
-  const execMint = testNft.interface.encodeFunctionData("mint", [createWallet().address]);
+  const execMint = testNft.interface.encodeFunctionData("mint", [createWallet().address, 2]);
   const mintTx = await contractWallet.connect(walletOwner).exec(testNft.address, 0, execMint);
   const mintReceipt = await ethers.provider.getTransactionReceipt(mintTx.hash);
 
@@ -207,7 +207,7 @@ async function get4337WalletGasResultWithEP(): Promise<GasResult> {
   //#region mint ERC721 via EntryPoint
   let mintUserOp = createDefaultUserOp(contractWallet.address);
   mintUserOp.nonce = await contractWallet.nonce();
-  const execMint = testNft.interface.encodeFunctionData("mint", [createWallet().address]);
+  const execMint = testNft.interface.encodeFunctionData("mint", [createWallet().address, 3]);
   mintUserOp.callData = contractWallet.interface.encodeFunctionData("execFromEntryPoint", [
     testNft.address,
     0,
