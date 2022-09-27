@@ -28,6 +28,7 @@ describe("Wallet testing", () => {
   let deployerAddress: string;
   let userPrivateKey: string;
   let userAddress: string;
+  let sponsorAddress: string;
   let beneficialAccountAddress: string;
 
   let entryPoint: EntryPoint;
@@ -44,6 +45,7 @@ describe("Wallet testing", () => {
   before(async () => {
     [deployer, beneficialAccount, sponsorSigner] = await ethers.getSigners();
     deployerAddress = await deployer.getAddress();
+    sponsorAddress = await sponsorSigner.getAddress();
     userPrivateKey = Wallet.createRandom().privateKey;
     userSigner = new Wallet(userPrivateKey, ethers.provider);
 
@@ -125,15 +127,24 @@ describe("Wallet testing", () => {
       userOperation.nonce = await walletLogic.nonce();
     }
     //transfer ether from simpleWallet for test
+    await deployer.sendTransaction({
+      from: deployerAddress,
+      to: walletProxyAddress,
+      value: utils.parseUnits("2", "ether"),
+    });
     userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
-      userAddress,
-      utils.parseUnits("0.00001", "ether"),
+      sponsorAddress,
+      utils.parseUnits("0.1", "ether"),
       "0x",
     ]);
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+    let sponsorInitialBal = await ethers.provider.getBalance(sponsorAddress);
     const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
     console.log(`simulateValidation result:`, result);
     await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+    expect(await ethers.provider.getBalance(sponsorAddress)).to.eq(
+      sponsorInitialBal.add(utils.parseUnits("0.1", "ether")),
+    );
   });
 
   it("test upgradeability", async () => {
@@ -187,33 +198,33 @@ describe("Wallet testing", () => {
 
     await entryPoint.handleOps([userOp], beneficialAccountAddress);
     expect(await maskToken.allowance(walletProxyAddress, depositPaymaster.address)).to.be.eq(constants.MaxUint256);
-
+    await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
     await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
     await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
     await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
-    // await depositPaymaster.lockTokenDeposit();
-    let callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+    let userOp1 = new UserOperation();
+    userOp1.sender = walletProxyAddress;
+    userOp1.nonce = await walletLogic.nonce();
+    userOp.initCode = "0x";
+    userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
+    userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+    userOp1.paymaster = depositPaymaster.address;
+    userOp1.paymasterData = utils.hexZeroPad(maskToken.address, 32);
+    const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [
+      verifyingPaymaster.address,
+      constants.MaxUint256,
+    ]);
+    userOp1.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
       maskToken.address,
       0,
-      (await maskToken.populateTransaction.approve(verifyingPaymaster.address, constants.MaxUint256)).data,
+      tokenApprovePaymaster,
     ]);
-    userOp.nonce = await walletLogic.nonce();
-    userOp.paymaster = depositPaymaster.address;
-    userOp.paymasterData = utils.hexZeroPad(maskToken.address, 32);
-    userOp.callData = callData;
-    userOp.signature = signUserOp(userOp, entryPoint.address, chainId, userPrivateKey);
-    // let userOp2 = await fillAndSign(
-    //   {
-    //     sender: walletProxyAddress,
-    //     paymaster: depositPaymaster.address,
-    //     paymasterData: utils.hexZeroPad(maskToken.address, 32),
-    //     callData: callData,
-    //   },
-    //   userSigner,
-    //   entryPoint,
-    // );
-    result = await entryPointStatic.callStatic.simulateValidation(userOp);
+    await userOp1.estimateGas(ethers.provider, entryPoint.address);
+    userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
+
+    result = await entryPointStatic.callStatic.simulateValidation(userOp1);
     console.log(result);
-    await entryPoint.handleOps([userOp], beneficialAccountAddress);
+    await entryPoint.handleOps([userOp1], beneficialAccountAddress);
+    expect(await maskToken.allowance(walletProxyAddress, verifyingPaymaster.address)).to.eq(constants.MaxUint256);
   });
 });
