@@ -3,6 +3,7 @@ import chaiAsPromised from "chai-as-promised";
 import { BigNumber, constants, Signer, utils, Wallet } from "ethers";
 import { ethers, network } from "hardhat";
 import {
+  DepositPaymaster,
   DepositPaymaster__factory,
   EntryPoint,
   EntryPoint__factory,
@@ -11,13 +12,16 @@ import {
   SimpleWalletUpgradeable__factory,
   SingletonFactory,
   SingletonFactory__factory,
+  TESTNFT__factory,
   VerifyingPaymaster__factory,
   WalletProxy,
   WalletProxy__factory,
 } from "../types";
+import { MaskToken } from "../types/contracts/test/MaskToken";
 import { UserOperation } from "./entity/userOperation";
 import { AddressZero } from "./utils/const";
 import { getPayMasterSignHash, signPayMasterHash, signUserOp } from "./utils/UserOp";
+
 const { expect } = use(chaiAsPromised);
 
 describe("Wallet testing", () => {
@@ -155,76 +159,86 @@ describe("Wallet testing", () => {
     // await walletProxy.connect(userSigner).upgradeToAndCall(simpleWallet.address, "0x", false);
   });
 
-  it("test paymaster", async () => {
-    let maskToken = await new MaskToken__factory(deployer).deploy();
+  describe("test paymaster", async () => {
+    let maskToken: MaskToken;
+    let depositPaymaster: DepositPaymaster;
+    it("test paymaster", async () => {
+      maskToken = await new MaskToken__factory(deployer).deploy();
 
-    let depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
-    await depositPaymaster.addStake(0, { value: utils.parseEther("2") });
+      depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
+      await depositPaymaster.addStake(0, { value: utils.parseEther("2") });
 
-    let verifyingPaymaster = await new VerifyingPaymaster__factory(deployer).deploy(
-      entryPoint.address,
-      userAddress, // paymaster signer for verifying signature
-      maskToken.address,
-      depositPaymaster.address,
-    );
-    await verifyingPaymaster.deposit({ value: utils.parseEther("1") });
-    await verifyingPaymaster.addStake(0, { value: utils.parseEther("1") });
+      let verifyingPaymaster = await new VerifyingPaymaster__factory(deployer).deploy(
+        entryPoint.address,
+        userAddress, // paymaster signer for verifying signature
+        maskToken.address,
+        depositPaymaster.address,
+      );
+      await verifyingPaymaster.deposit({ value: utils.parseEther("1") });
+      await verifyingPaymaster.addStake(0, { value: utils.parseEther("1") });
 
-    let userOp = new UserOperation();
-    userOp.sender = walletProxyAddress;
-    userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
-    userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-    userOp.paymaster = verifyingPaymaster.address;
-    userOp.initCode = "0x";
-    userOp.nonce = await walletLogic.nonce();
+      let userOp = new UserOperation();
+      userOp.sender = walletProxyAddress;
+      userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
+      userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+      userOp.paymaster = verifyingPaymaster.address;
+      userOp.initCode = "0x";
+      userOp.nonce = await walletLogic.nonce();
 
-    const approveData = maskToken.interface.encodeFunctionData("approve", [
-      depositPaymaster.address,
-      constants.MaxUint256,
-    ]);
-    userOp.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
-      maskToken.address,
-      0,
-      approveData,
-    ]);
-    await userOp.estimateGas(ethers.provider, entryPoint.address);
+      const approveData = maskToken.interface.encodeFunctionData("approve", [
+        depositPaymaster.address,
+        constants.MaxUint256,
+      ]);
+      userOp.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+        maskToken.address,
+        0,
+        approveData,
+      ]);
+      await userOp.estimateGas(ethers.provider, entryPoint.address);
 
-    const paymasterSignHash = getPayMasterSignHash(userOp);
-    userOp.paymasterData = signPayMasterHash(paymasterSignHash, userPrivateKey);
+      const paymasterSignHash = getPayMasterSignHash(userOp);
+      userOp.paymasterData = signPayMasterHash(paymasterSignHash, userPrivateKey);
 
-    userOp.signature = signUserOp(userOp, entryPoint.address, chainId, userPrivateKey);
-    let result = await entryPointStatic.callStatic.simulateValidation(userOp);
-    console.log(result);
+      userOp.signature = signUserOp(userOp, entryPoint.address, chainId, userPrivateKey);
+      let result = await entryPointStatic.callStatic.simulateValidation(userOp);
+      console.log(result);
 
-    await entryPoint.handleOps([userOp], beneficialAccountAddress);
-    expect(await maskToken.allowance(walletProxyAddress, depositPaymaster.address)).to.be.eq(constants.MaxUint256);
-    await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
-    await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
-    await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
-    await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
-    let userOp1 = new UserOperation();
-    userOp1.sender = walletProxyAddress;
-    userOp1.nonce = await walletLogic.nonce();
-    userOp.initCode = "0x";
-    userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
-    userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-    userOp1.paymaster = depositPaymaster.address;
-    userOp1.paymasterData = utils.hexZeroPad(maskToken.address, 32);
-    const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [
-      verifyingPaymaster.address,
-      constants.MaxUint256,
-    ]);
-    userOp1.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
-      maskToken.address,
-      0,
-      tokenApprovePaymaster,
-    ]);
-    await userOp1.estimateGas(ethers.provider, entryPoint.address);
-    userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
+      await entryPoint.handleOps([userOp], beneficialAccountAddress);
+      expect(await maskToken.allowance(walletProxyAddress, depositPaymaster.address)).to.be.eq(constants.MaxUint256);
+      await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
+      await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
+      await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
+      await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
+      let userOp1 = new UserOperation();
+      userOp1.sender = walletProxyAddress;
+      userOp1.nonce = await walletLogic.nonce();
+      userOp.initCode = "0x";
+      userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
+      userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+      userOp1.paymaster = depositPaymaster.address;
+      userOp1.paymasterData = utils.hexZeroPad(maskToken.address, 32);
+      const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [
+        verifyingPaymaster.address,
+        constants.MaxUint256,
+      ]);
+      userOp1.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+        maskToken.address,
+        0,
+        tokenApprovePaymaster,
+      ]);
+      await userOp1.estimateGas(ethers.provider, entryPoint.address);
+      userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
 
-    result = await entryPointStatic.callStatic.simulateValidation(userOp1);
-    console.log(result);
-    await entryPoint.handleOps([userOp1], beneficialAccountAddress);
-    expect(await maskToken.allowance(walletProxyAddress, verifyingPaymaster.address)).to.eq(constants.MaxUint256);
+      result = await entryPointStatic.callStatic.simulateValidation(userOp1);
+      console.log(result);
+      await entryPoint.handleOps([userOp1], beneficialAccountAddress);
+      expect(await maskToken.allowance(walletProxyAddress, verifyingPaymaster.address)).to.eq(constants.MaxUint256);
+    });
+
+    it("can receive erc721 assets", async () => {
+      const testNft = await new TESTNFT__factory(deployer).deploy();
+      await testNft.connect(deployer).mint(walletLogic.address, 0);
+      expect(await testNft.ownerOf(0)).eq(walletLogic.address);
+    });
   });
 });

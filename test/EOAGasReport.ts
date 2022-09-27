@@ -32,11 +32,11 @@ describe("#gasReport", () => {
     await maskToken.connect(wallet).transfer(await ethersSigner.getAddress(), 1);
   });
 
-  it("should export 4337 mint an NFT gas", async () => {
+  it("should export eoa mint an NFT gas", async () => {
     const testNft = await new TESTNFT__factory(ethersSigner).deploy();
 
-    await testNft.connect(wallet).mint(createWallet().address);
+    await testNft.connect(wallet).mint(createWallet().address, 1);
   });
 
-  it("should export 4337 claim an red packet gas", async () => {});
+  it("should export eoa claim an red packet gas", async () => {});
 });
