@@ -16,6 +16,16 @@ The above is a sequence diagram which could describe the general idea of how pay
 - After the verification loop, the sponsor will help send the execution transaction through EntryPoint contract.
 - Then, sponsor and EntryPoint will get payback in `postOp()` of paymaster contract.
 
+## State in EIP-4337
+
+![state](stateDiagram.png)
+
+Understanding the state transition in EIP-4337 could help you understand our workflow better.
+
+Since the new data structure `UserOperation` is introduced in EIP-4337, only two status of transaction (i.e. failure and success of a transaction) cannot describe the status of `UserOperation` precisely. We should know a new condition: **Transaction succeed, but the original user call is reverted**. With this status, our system is able to get paid even though the user call fails.
+
+Check [try/catch mechanism in solidity](https://docs.soliditylang.org/en/v0.8.17/control-structures.html?highlight=try#try-catch) for more detail.
+
 ## Detail of Paymaster
 
 According to the [official doc of ERC-4337](https://eips.ethereum.org/EIPS/eip-4337#simulation),

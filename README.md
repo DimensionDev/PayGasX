@@ -30,21 +30,13 @@ Contract wallet is deployed for PayGasX users to help them manage their ERC20 as
 
 ## GasReport
 
-#### gas report (deploy)
+Check detail gas cost at [`GasReport.md`](./DOC/GasReport.md).
 
-1. SimpleWallet : 970841
-2. SimpleWalletUpgradeable(one time): 1012766
-3. ERC1967 Proxy Wallet: 503475
+You could run the following command to generate gas report automatically.
 
-#### gas report (usage)
-
-|                                  | 4337 wallet | EOA wallet |
-| -------------------------------- | ----------- | ---------- |
-| transfer Ether (direct by owner) | 63645       | 21000      |
-| transfer ether(by entry point)   | 164231      | 21000      |
-| approve erc20 token              | 196146      | 46196      |
-| transfer erc20 token             | 156232      | 51602      |
-| mint an NFT                      | 205348      | 93527      |
+```shell
+  npm run gas-report
+```
 
 ## Contribute
 
