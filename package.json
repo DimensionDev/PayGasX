@@ -8,6 +8,7 @@
     "lint": "hardhat check",
     "compile": "hardhat compile",
     "deploy": "hardhat deploy --network",
+    "gas-report": "ts-node GasReport.ts",
     "format": "prettier --write ./"
   },
   "devDependencies": {

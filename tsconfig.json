@@ -7,6 +7,6 @@
     "esModuleInterop": true,
     "strictNullChecks": true
   },
-  "include": ["./test", "./types", "./SmartContractProjectConfig", "./deploy"],
+  "include": ["./test", "./types", "./SmartContractProjectConfig", "./deploy", "GasReport.ts"],
   "files": ["./hardhat.config.ts"]
 }

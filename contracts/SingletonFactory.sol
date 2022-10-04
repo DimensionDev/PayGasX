@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.7;
-import "hardhat/console.sol";
 
 /**
  * @title Singleton Factory (EIP-2470)
@@ -24,7 +23,6 @@ contract SingletonFactory {
             createdContract := create2(0, add(initCode, 0x20), mload(initCode), salt)
         }
 
-        console.log(">>>>>>>>>>>>>>>>>>SingletonFactory create2 address: ", createdContract);
         require(createdContract != address(0), "SingletonFactory: Create2 failed");
         lastDeployedContract = createdContract;
         emit Deployed(createdContract, salt);
