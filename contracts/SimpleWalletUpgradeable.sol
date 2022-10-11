@@ -80,6 +80,10 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
         StorageSlot.getAddressSlot(_ADMIN_SLOT).value = newAdmin;
     }
 
+    function changeOwner(address newOwner) public onlyOwner {
+        _setAdmin(newOwner);
+    }
+
     /**
      * transfer eth value to a destination address
      */
