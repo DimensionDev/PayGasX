@@ -95,9 +95,10 @@ describe("Wallet testing", () => {
     await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(utils.parseUnits("2", "ether"));
     await walletContract.transfer(beneficialAccountAddress, utils.parseUnits("1", "ether"));
     await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(utils.parseUnits("1", "ether"));
-    await expect(
-      walletContract.connect(beneficialAccount).transfer(beneficialAccountAddress, utils.parseUnits("1", "ether")),
-    ).to.be.revertedWith("only owner");
+    await walletContract.changeOwner(beneficialAccountAddress);
+    await expect(walletContract.transfer(beneficialAccountAddress, utils.parseUnits("1", "ether"))).to.be.revertedWith(
+      "only owner",
+    );
   });
 
   it("test wallet without paymaster", async () => {
@@ -152,11 +153,22 @@ describe("Wallet testing", () => {
   });
 
   it("test upgradeability", async () => {
-    let simpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
-    await expect(walletProxy.connect(beneficialAccount).upgradeToAndCall(simpleWallet.address, "0x", false)).to.be
-      .rejected;
-    // TODO: proxy owner has no eth to call upgrade
-    // await walletProxy.connect(userSigner).upgradeToAndCall(simpleWallet.address, "0x", false);
+    let testSimpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
+    let testProxy = await new WalletProxy__factory(deployer).deploy(
+      await deployer.getAddress(),
+      testSimpleWallet.address,
+      "0x",
+    );
+    testSimpleWallet = new ethers.Contract(
+      testProxy.address,
+      SimpleWalletUpgradeable__factory.abi,
+      deployer,
+    ) as SimpleWalletUpgradeable;
+    await testSimpleWallet.initialize(entryPoint.address, await deployer.getAddress());
+    await expect(
+      testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
+    ).to.be.revertedWith("only owner");
+    await testProxy.upgradeToAndCall(testSimpleWallet.address, "0x", false);
   });
 
   describe("test paymaster", async () => {
