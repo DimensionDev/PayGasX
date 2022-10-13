@@ -26,6 +26,16 @@ Since the new data structure `UserOperation` is introduced in EIP-4337, only two
 
 Check [try/catch mechanism in solidity](https://docs.soliditylang.org/en/v0.8.17/control-structures.html?highlight=try#try-catch) for more detail.
 
+## Details of SimpleWallet
+
+Transactions can be executed directly by the owner through `exec(address, uint256, bytes)`, or from EntryPoint `execFromEntryPoint(address, uint256, bytes)`.
+
+- Calling `exec()` directly require the owner address to hold sufficient coins to pay for the GAS fees, the wallet will behave like normal smart contract wallet when used this way.
+- An alternative way to achieve GAS-less transaction is to sponsor the transaction by pre-deposit the fees into EntryPoint contract by calling `addDeposit() payable`. The user will have to sign an userOperation and get a Bundler to execute it from the EntryPoint.
+
+The two methods will achieve the same result.
+![walletWorkFlow](4337WalletWorkFlow.png)
+
 ## Detail of Paymaster
 
 According to the [official doc of ERC-4337](https://eips.ethereum.org/EIPS/eip-4337#simulation),

@@ -2,7 +2,6 @@ import { use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { BigNumber, constants, Signer, utils, Wallet } from "ethers";
 import { ethers, network } from "hardhat";
-
 import {
   DepositPaymaster,
   DepositPaymaster__factory,
@@ -22,6 +21,7 @@ import { MaskToken } from "../types/contracts/test/MaskToken";
 import { UserOperation } from "./entity/userOperation";
 import { AddressZero } from "./utils/const";
 import { getPayMasterSignHash, signPayMasterHash, signUserOp } from "./utils/UserOp";
+
 const { expect } = use(chaiAsPromised);
 
 describe("Wallet testing", () => {
@@ -32,6 +32,7 @@ describe("Wallet testing", () => {
   let deployerAddress: string;
   let userPrivateKey: string;
   let userAddress: string;
+  let sponsorAddress: string;
   let beneficialAccountAddress: string;
 
   let entryPoint: EntryPoint;
@@ -48,6 +49,7 @@ describe("Wallet testing", () => {
   before(async () => {
     [deployer, beneficialAccount, sponsorSigner] = await ethers.getSigners();
     deployerAddress = await deployer.getAddress();
+    sponsorAddress = await sponsorSigner.getAddress();
     userPrivateKey = Wallet.createRandom().privateKey;
     userSigner = new Wallet(userPrivateKey, ethers.provider);
 
@@ -93,9 +95,10 @@ describe("Wallet testing", () => {
     await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(utils.parseUnits("2", "ether"));
     await walletContract.transfer(beneficialAccountAddress, utils.parseUnits("1", "ether"));
     await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(utils.parseUnits("1", "ether"));
-    await expect(
-      walletContract.connect(beneficialAccount).transfer(beneficialAccountAddress, utils.parseUnits("1", "ether")),
-    ).to.be.revertedWith("only owner");
+    await walletContract.changeOwner(beneficialAccountAddress);
+    await expect(walletContract.transfer(beneficialAccountAddress, utils.parseUnits("1", "ether"))).to.be.revertedWith(
+      "only owner",
+    );
   });
 
   it("test wallet without paymaster", async () => {
@@ -129,23 +132,43 @@ describe("Wallet testing", () => {
       userOperation.nonce = await walletLogic.nonce();
     }
     //transfer ether from simpleWallet for test
+    await deployer.sendTransaction({
+      from: deployerAddress,
+      to: walletProxyAddress,
+      value: utils.parseUnits("2", "ether"),
+    });
     userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
-      userAddress,
-      utils.parseUnits("0.00001", "ether"),
+      sponsorAddress,
+      utils.parseUnits("0.1", "ether"),
       "0x",
     ]);
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+    let sponsorInitialBal = await ethers.provider.getBalance(sponsorAddress);
     const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
     console.log(`simulateValidation result:`, result);
     await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+    expect(await ethers.provider.getBalance(sponsorAddress)).to.eq(
+      sponsorInitialBal.add(utils.parseUnits("0.1", "ether")),
+    );
   });
 
   it("test upgradeability", async () => {
-    let simpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
-    await expect(walletProxy.connect(beneficialAccount).upgradeToAndCall(simpleWallet.address, "0x", false)).to.be
-      .rejected;
-    // TODO: proxy owner has no eth to call upgrade
-    // await walletProxy.connect(userSigner).upgradeToAndCall(simpleWallet.address, "0x", false);
+    let testSimpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
+    let testProxy = await new WalletProxy__factory(deployer).deploy(
+      await deployer.getAddress(),
+      testSimpleWallet.address,
+      "0x",
+    );
+    testSimpleWallet = new ethers.Contract(
+      testProxy.address,
+      SimpleWalletUpgradeable__factory.abi,
+      deployer,
+    ) as SimpleWalletUpgradeable;
+    await testSimpleWallet.initialize(entryPoint.address, await deployer.getAddress());
+    await expect(
+      testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
+    ).to.be.revertedWith("only owner");
+    await testProxy.upgradeToAndCall(testSimpleWallet.address, "0x", false);
   });
 
   describe("test paymaster", async () => {
@@ -194,39 +217,38 @@ describe("Wallet testing", () => {
 
       await entryPoint.handleOps([userOp], beneficialAccountAddress);
       expect(await maskToken.allowance(walletProxyAddress, depositPaymaster.address)).to.be.eq(constants.MaxUint256);
-
+      await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
       await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
       await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
       await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
-      // await depositPaymaster.lockTokenDeposit();
-      let callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+      let userOp1 = new UserOperation();
+      userOp1.sender = walletProxyAddress;
+      userOp1.nonce = await walletLogic.nonce();
+      userOp.initCode = "0x";
+      userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
+      userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+      userOp1.paymaster = depositPaymaster.address;
+      userOp1.paymasterData = utils.hexZeroPad(maskToken.address, 32);
+      const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [
+        verifyingPaymaster.address,
+        constants.MaxUint256,
+      ]);
+      userOp1.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
         maskToken.address,
         0,
-        (await maskToken.populateTransaction.approve(verifyingPaymaster.address, constants.MaxUint256)).data,
+        tokenApprovePaymaster,
       ]);
-      userOp.nonce = await walletLogic.nonce();
-      userOp.paymaster = depositPaymaster.address;
-      userOp.paymasterData = utils.hexZeroPad(maskToken.address, 32);
-      userOp.callData = callData;
-      userOp.signature = signUserOp(userOp, entryPoint.address, chainId, userPrivateKey);
-      // let userOp2 = await fillAndSign(
-      //   {
-      //     sender: walletProxyAddress,
-      //     paymaster: depositPaymaster.address,
-      //     paymasterData: utils.hexZeroPad(maskToken.address, 32),
-      //     callData: callData,
-      //   },
-      //   userSigner,
-      //   entryPoint,
-      // );
-      result = await entryPointStatic.callStatic.simulateValidation(userOp);
+      await userOp1.estimateGas(ethers.provider, entryPoint.address);
+      userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
+
+      result = await entryPointStatic.callStatic.simulateValidation(userOp1);
       console.log(result);
-      await entryPoint.handleOps([userOp], beneficialAccountAddress);
+      await entryPoint.handleOps([userOp1], beneficialAccountAddress);
+      expect(await maskToken.allowance(walletProxyAddress, verifyingPaymaster.address)).to.eq(constants.MaxUint256);
     });
 
     it("can receive erc721 assets", async () => {
       const testNft = await new TESTNFT__factory(deployer).deploy();
-
       await testNft.connect(deployer).mint(walletLogic.address, 0);
       expect(await testNft.ownerOf(0)).eq(walletLogic.address);
     });
