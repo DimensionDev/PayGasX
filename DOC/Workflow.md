@@ -1,20 +1,6 @@
 # Workflow
 
-## Workflow of Entire System
-
-![workflow](handlerOp_timesquence.jpeg)
-
-The above is a sequence diagram which could describe the general idea of how paymaster work in the ERC-4337 system.
-
-- Before each paymaster starts work, they need to deposit and stake in EntryPoint contract.
-- During the verification loop (before EntryPoint contract handle the UserOperation), the system will check:
-
-  - if paymaster has enough stake in EntryPoint.
-  - if paymaster is willing to pay for this UserOperation.
-  - if the validation of UserOperation is passed in SC Wallet (Smart Contract Wallet).
-
-- After the verification loop, the sponsor will help send the execution transaction through EntryPoint contract.
-- Then, sponsor and EntryPoint will get payback in `postOp()` of paymaster contract.
+Before dive deep into the detail about workflow of PayGasX, it would be better to know the general structure of the proposal [EIP-4337](https://eips.ethereum.org/EIPS/eip-4337) in advance.
 
 ## State in EIP-4337
 
