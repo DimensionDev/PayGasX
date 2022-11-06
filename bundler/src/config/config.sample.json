@@ -1,0 +1,7 @@
+{
+  "chain": {
+    "rpc_server": "https://rpc.testnet.near.org",
+    "secret_key": "ABC12345",
+    "entrypoint_contract_address": "0x1234567890"
+  }
+}

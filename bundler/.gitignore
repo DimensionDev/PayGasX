@@ -1,1 +1,3 @@
 .aws-sam/
+src/config/*.json
+!src/config/config.sample.json
