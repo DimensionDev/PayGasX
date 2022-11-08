@@ -20,12 +20,12 @@ type Config struct {
 
 type ChainConfig struct {
 	RPCServer          string `json:"rpc_server"`
-	PaymasterSecretKey string `json:"paymaster_secret_key"`
+	SecretKey string `json:"secret_key"`
 	EntrypointContractAddress string `json:"entrypoint_contract_address"`
 }
 
 func InitFromFile(filename string) {
-	if len(C.Chain.RPCServer) > 0 {
+	if C != nil {
 		return
 	}
 
@@ -37,10 +37,14 @@ func InitFromFile(filename string) {
 	if err = json.Unmarshal(configContent, C); err != nil {
 		panic(fmt.Sprintf("Error parsing config file: %v", err))
 	}
+
+	fmt.Printf("Bundler EOA address: 0x%s", GetBundlerAddress().Hex())
+	fmt.Printf("Contract address: 0x%s", GetEntrypointContractAddress().Hex())
+
 }
 
-func GetPaymaster() *ecdsa.PrivateKey {
-	skBytes := common.Hex2Bytes(C.Chain.PaymasterSecretKey)
+func GetBundler() *ecdsa.PrivateKey {
+	skBytes := common.Hex2Bytes(C.Chain.SecretKey)
 	sk, err := crypto.ToECDSA(skBytes)
 	if err != nil {
 		panic(fmt.Sprintf("failed to parse paymaster secret key: %v", err))
@@ -48,8 +52,8 @@ func GetPaymaster() *ecdsa.PrivateKey {
 	return sk
 }
 
-func GetPaymasterAddres() common.Address {
-	sk := GetPaymaster()
+func GetBundlerAddress() common.Address {
+	sk := GetBundler()
 	return crypto.PubkeyToAddress(sk.PublicKey)
 }
 
