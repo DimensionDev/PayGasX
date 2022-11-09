@@ -40,6 +40,22 @@ You could run the following command to generate gas report automatically.
   npm run gas-report
 ```
 
+## Deployed Contract Address
+
+<!-- begin PayGasX -->
+
+| Chain        | MaskToken                       | EntryPoint                      | DepositPaymaster                 | VerifyingPaymaster               | WalletLogic                     |
+| ------------ | ------------------------------- | ------------------------------- | -------------------------------- | -------------------------------- | ------------------------------- |
+| matic_mumbai | [`0xF8935Df6`][mt-matic_mumbai] | [`0x8A42F700`][ep-matic_mumbai] | [`0xaeA8AB98`][dpm-matic_mumbai] | [`0xB349AC5E`][vpm-matic_mumbai] | [`0xd81c16d7`][wl-matic_mumbai] |
+
+[mt-matic_mumbai]: https://mumbai.polygonscan.com/address/0xF8935Df67cAB7BfcA9532D1Ac2088C5c39b995b5
+[ep-matic_mumbai]: https://mumbai.polygonscan.com/address/0x8A42F70047a99298822dD1dbA34b454fc49913F2
+[dpm-matic_mumbai]: https://mumbai.polygonscan.com/address/0xaeA8AB98C5F3171ffD5F043f132fF32B8bEfE70F
+[vpm-matic_mumbai]: https://mumbai.polygonscan.com/address/0xB349AC5E5C037C2ecb2AE9fCDc8F122b5f384620
+[wl-matic_mumbai]: https://mumbai.polygonscan.com/address/0xd81c16d71432d7dF04575fFE9fEd76F837FEa0CC
+
+<!-- end PayGasX -->
+
 ## Contribute
 
 Any contribution is welcomed to make it better.
