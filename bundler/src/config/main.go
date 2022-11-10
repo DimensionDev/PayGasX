@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -16,12 +17,22 @@ var (
 
 type Config struct {
 	Chain ChainConfig `json:"chain"`
+	// Test can be nil in production env.
+	Test  *TestConfig `json:"test"`
 }
 
 type ChainConfig struct {
-	RPCServer          string `json:"rpc_server"`
-	SecretKey string `json:"secret_key"`
+	ChainID                   string `json:"id"`
+	RPCServer                 string `json:"rpc_server"`
+	SecretKey                 string `json:"secret_key"`
 	EntrypointContractAddress string `json:"entrypoint_contract_address"`
+}
+
+type TestConfig struct {
+	UserSecret            string `json:"user_secret"`
+	WalletContractAddress string `json:"contract_wallet_address"`
+	TestERC20Address      string `json:"erc20_contract_address"`
+	PaymasterAddress      string `json:"paymaster_address"`
 }
 
 func InitFromFile(filename string) {
@@ -38,9 +49,20 @@ func InitFromFile(filename string) {
 		panic(fmt.Sprintf("Error parsing config file: %v", err))
 	}
 
+	GetChainID() // Check Chain ID config
+	GetBundler() // Check bundler config
+
 	fmt.Printf("Bundler EOA address: 0x%s", GetBundlerAddress().Hex())
 	fmt.Printf("Contract address: 0x%s", GetEntrypointContractAddress().Hex())
 
+}
+
+func GetChainID() *big.Int {
+	id, ok := big.NewInt(0).SetString(C.Chain.ChainID, 10)
+	if !ok {
+		panic(fmt.Sprintf("failed to parse chain id: %v", C.Chain.ChainID))
+	}
+	return id
 }
 
 func GetBundler() *ecdsa.PrivateKey {
@@ -56,7 +78,6 @@ func GetBundlerAddress() common.Address {
 	sk := GetBundler()
 	return crypto.PubkeyToAddress(sk.PublicKey)
 }
-
 
 func GetEntrypointContractAddress() common.Address {
 	return common.HexToAddress(C.Chain.EntrypointContractAddress)

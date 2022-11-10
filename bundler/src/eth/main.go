@@ -21,6 +21,7 @@ var (
 	l      = logrus.WithFields(logrus.Fields{
 		"module": "eth",
 	})
+	bundler *bind.TransactOpts
 )
 
 type SimulateResult struct {
@@ -38,9 +39,14 @@ func Init() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to connect to the Ethereum client: %s", err.Error()))
 	}
+
+	bundler, err = bind.NewKeyedTransactorWithChainID(config.GetBundler(), config.GetChainID())
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create transactor for bundler: %s", err.Error()))
+	}
 }
 
-func Simulate(op abi.UserOperation) error {
+func Simulate(ctx context.Context, op abi.UserOperation) error {
 	// Init contract
 	entrypoint, err := abi.NewEntryPoint(config.GetEntrypointContractAddress(), client)
 	if err != nil {
@@ -50,15 +56,18 @@ func Simulate(op abi.UserOperation) error {
 	// Start simulation
 	// Build a call to SimulateValidation, but not send on the chain.
 	tx, err := entrypoint.SimulateValidation(&bind.TransactOpts{
-		NoSend: true,
+		From:    bundler.From,
+		Signer:  bundler.Signer,
+		NoSend:  true,
+		Context: ctx,
 	}, op)
 	if err != nil {
 		return err
 	}
 
 	// Use `eth_call` to simulate the transaction on remote RPC server.
-	simResultBytes, err := client.CallContract(context.Background(), ethereum.CallMsg{
-		From:      config.GetBundlerAddress(),
+	simResultBytes, err := client.CallContract(ctx, ethereum.CallMsg{
+		From:      bundler.From,
 		To:        tx.To(),
 		Gas:       tx.Gas(),
 		GasPrice:  tx.GasPrice(),
@@ -80,14 +89,19 @@ func Simulate(op abi.UserOperation) error {
 	return nil
 }
 
-func HandleOps(ops []abi.UserOperation) (txHash string, err error) {
+func HandleOps(ctx context.Context, ops []abi.UserOperation) (txHash string, err error) {
 	// Init contract
 	entrypoint, err := abi.NewEntryPoint(config.GetEntrypointContractAddress(), client)
 	if err != nil {
 		return "", err
 	}
 
-	tx, err := entrypoint.HandleOps(nil, ops, config.GetBundlerAddress())
+	tx, err := entrypoint.HandleOps(&bind.TransactOpts{
+		From:    bundler.From,
+		Signer:  bundler.Signer,
+		Context: ctx,
+		NoSend:  false,
+	}, ops, config.GetBundlerAddress())
 	if err != nil {
 		return "", err
 	}
