@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/xerrors"
 
@@ -21,7 +22,6 @@ var (
 	l      = logrus.WithFields(logrus.Fields{
 		"module": "eth",
 	})
-	bundler *bind.TransactOpts
 )
 
 type SimulateResult struct {
@@ -39,11 +39,6 @@ func Init() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to connect to the Ethereum client: %s", err.Error()))
 	}
-
-	bundler, err = bind.NewKeyedTransactorWithChainID(config.GetBundler(), config.GetChainID())
-	if err != nil {
-		panic(fmt.Sprintf("Failed to create transactor for bundler: %s", err.Error()))
-	}
 }
 
 func Simulate(ctx context.Context, op abi.UserOperation) error {
@@ -53,39 +48,28 @@ func Simulate(ctx context.Context, op abi.UserOperation) error {
 		return err
 	}
 
-	// Start simulation
-	// Build a call to SimulateValidation, but not send on the chain.
-	tx, err := entrypoint.SimulateValidation(&bind.TransactOpts{
-		From:    bundler.From,
-		Signer:  bundler.Signer,
-		NoSend:  true,
+	signer := types.LatestSignerForChainID(config.GetChainID())
+	tOps := &bind.TransactOpts{
+		// Zero address `from` required by contract
+		From: common.Address{},
+		// Basiclly bind.NewKeyedTransactorWithChainID() but omit `ErrNotAuthorized` check
+		Signer: func(address common.Address, tx *types.Transaction) (*types.Transaction, error) {
+			signature, err := crypto.Sign(signer.Hash(tx).Bytes(), config.GetBundler())
+			if err != nil {
+				return nil, err
+			}
+			return tx.WithSignature(signer, signature)
+		},
 		Context: ctx,
-	}, op)
-	if err != nil {
-		return err
+		NoSend:  true,
 	}
 
-	// Use `eth_call` to simulate the transaction on remote RPC server.
-	simResultBytes, err := client.CallContract(ctx, ethereum.CallMsg{
-		From:      bundler.From,
-		To:        tx.To(),
-		Gas:       tx.Gas(),
-		GasPrice:  tx.GasPrice(),
-		GasFeeCap: tx.GasFeeCap(),
-		GasTipCap: tx.GasTipCap(),
-		Value:     tx.Value(),
-		Data:      tx.Data(),
-	}, nil)
+	// Start simulation
+	_, err = entrypoint.SimulateValidation(tOps, op)
 	if err != nil {
+		l.Warnf("Simulation failed. Error: %s", err.Error())
 		return err
 	}
-	simResult := new(SimulateResult)
-	err = rlp.DecodeBytes(simResultBytes, simResult)
-	if err != nil {
-		return xerrors.Errorf("error when decoding simulate result: %w", err)
-	}
-	l.Debugf("Simulate result for %s: %v", op.Sender.Hex(), simResult)
-
 	return nil
 }
 
@@ -95,13 +79,13 @@ func HandleOps(ctx context.Context, ops []abi.UserOperation) (txHash string, err
 	if err != nil {
 		return "", err
 	}
+	transactOps, err := bind.NewKeyedTransactorWithChainID(config.GetBundler(), config.GetChainID())
+	if err != nil {
+		return "", xerrors.Errorf("Failed to create transactor for bundler: %w", err)
+	}
+	transactOps.Context = ctx
 
-	tx, err := entrypoint.HandleOps(&bind.TransactOpts{
-		From:    bundler.From,
-		Signer:  bundler.Signer,
-		Context: ctx,
-		NoSend:  false,
-	}, ops, config.GetBundlerAddress())
+	tx, err := entrypoint.HandleOps(transactOps, ops, config.GetBundlerAddress())
 	if err != nil {
 		return "", err
 	}

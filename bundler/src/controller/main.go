@@ -9,7 +9,12 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/xerrors"
+)
+
+var (
+	l = logrus.WithField("module", "controller")
 )
 
 type HandleOpsRequest struct {
@@ -90,7 +95,7 @@ func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRes
 	}
 
 	abiUOs := make([]abi.UserOperation, len(req.user_operations))
-	for _, uo := range(req.user_operations) {
+	for _, uo := range req.user_operations {
 		abiUO, err := uo.ToABIStruct()
 		if err != nil {
 			return errorResp(400, fmt.Sprintf("failed to parse user operation: %s", err.Error()))
@@ -104,8 +109,8 @@ func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRes
 	}
 
 	return events.APIGatewayProxyResponse{
-		StatusCode:        200,
-		Body:              fmt.Sprintf("{\"tx_hash\": \"%s\"}", txHash),
-		IsBase64Encoded:   false,
+		StatusCode:      200,
+		Body:            fmt.Sprintf("{\"tx_hash\": \"%s\"}", txHash),
+		IsBase64Encoded: false,
 	}, nil
 }

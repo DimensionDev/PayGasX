@@ -4,8 +4,8 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/big"
+	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -40,20 +40,20 @@ func InitFromFile(filename string) {
 		return
 	}
 
-	configContent, err := ioutil.ReadFile(filename)
+	configContent, err := os.ReadFile(filename)
 	if err != nil {
 		panic(fmt.Sprintf("Error reading config file: %v", err))
 	}
 
-	if err = json.Unmarshal(configContent, C); err != nil {
+	if err = json.Unmarshal(configContent, &C); err != nil {
 		panic(fmt.Sprintf("Error parsing config file: %v", err))
 	}
 
 	GetChainID() // Check Chain ID config
 	GetBundler() // Check bundler config
 
-	fmt.Printf("Bundler EOA address: 0x%s", GetBundlerAddress().Hex())
-	fmt.Printf("Contract address: 0x%s", GetEntrypointContractAddress().Hex())
+	fmt.Printf("Bundler EOA address: %s\n", GetBundlerAddress().Hex())
+	fmt.Printf("Entrypoint contract address: %s\n", GetEntrypointContractAddress().Hex())
 
 }
 
