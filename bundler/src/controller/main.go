@@ -19,7 +19,7 @@ var (
 )
 
 type HandleOpsRequest struct {
-	UserOperations []UserOperation `json:"UserOperations"`
+	UserOperations []UserOperation `json:"user_operations"`
 }
 
 type UserOperation struct {

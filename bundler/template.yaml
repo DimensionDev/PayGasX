@@ -30,13 +30,12 @@ Resources:
         ProxyResource:
           Type: HttpApi
           Properties:
-            PayloadFormatVersion: "2.0"
             Path: /{proxy+}
-            Method: ANY
+            Method: GET
         RootResource:
-          PayloadFormatVersion: "2.0"
           Type: HttpApi
           Properties:
+            PayloadFormatVersion: "2.0"
             Path: /
             Method: ANY
   Configuration:

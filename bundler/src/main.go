@@ -4,24 +4,32 @@ import (
 	"bundler/config"
 	"bundler/controller"
 	"bundler/eth"
+	"fmt"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if request.HTTPMethod == "GET" && request.Path == "/healthz" {
+	path, ok := request.PathParameters["proxy"]
+	if !ok {
+		return events.APIGatewayProxyResponse{
+			StatusCode: 400,
+			Body:       "Bad Request",
+		}, nil
+	}
+
+	switch path {
+	case "healthz":
 		return controller.Healthz(request)
-	}
-
-	if request.Path == "/handle" && request.HTTPMethod == "POST" {
+	case "handle":
 		return controller.HandleOps(request)
+	default:
+		return events.APIGatewayProxyResponse{
+			Body:       fmt.Sprintf("Not Found for request %v.", request),
+			StatusCode: 404,
+		}, nil
 	}
-
-	return events.APIGatewayProxyResponse{
-		Body:       "Not Found",
-		StatusCode: 404,
-	}, nil
 }
 
 func init() {
