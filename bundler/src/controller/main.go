@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bundler/abi"
+	"bundler/config"
 	"bundler/eth"
 	"bundler/util"
 	"context"
@@ -17,6 +18,13 @@ import (
 var (
 	l = logrus.WithField("module", "controller")
 )
+
+type HealthResponse struct {
+	Hello                     string `json:"hello"`
+	BundlerEOA                string `json:"bundler_eoa"`
+	ChainID                   string `json:"chain_id"`
+	EntrypointContractAddress string `json:"entrypoint_contract_address"`
+}
 
 type HandleOpsRequest struct {
 	UserOperations []UserOperation `json:"user_operations"`
@@ -47,6 +55,10 @@ type UserOperation struct {
 	// Base64 encoded
 	Signature *string `json:"signature"`
 	// No need to give paymaster data
+}
+
+type HandleOpsResponse struct {
+	TxHash string `json:"tx_hash"`
 }
 
 func (uo *UserOperation) ToABIStruct() (abiUO abi.UserOperation, err error) {
@@ -80,16 +92,36 @@ func (uo *UserOperation) ToABIStruct() (abiUO abi.UserOperation, err error) {
 func errorResp(code int, body string) (events.APIGatewayProxyResponse, error) {
 	return events.APIGatewayProxyResponse{
 		StatusCode: code,
+		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       fmt.Sprintf("{\"message\": \"%s\"}", body),
 	}, nil
 }
 
-func Healthz(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func successResp(body any) (events.APIGatewayProxyResponse, error) {
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode:      500,
+			Headers:         map[string]string{"Content-Type": "application/json"},
+			Body:            fmt.Sprintf("{\"message\": \"failed to marshal response body: %s\"}", err.Error()),
+			IsBase64Encoded: false,
+		}, nil
+	}
 	return events.APIGatewayProxyResponse{
 		StatusCode:      200,
-		Body:            "OK",
+		Headers:         map[string]string{"Content-Type": "application/json"},
+		Body:            string(bodyBytes),
 		IsBase64Encoded: false,
 	}, nil
+}
+
+func Healthz(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	return successResp(HealthResponse{
+		Hello:                     "bundler",
+		BundlerEOA:                config.GetBundlerAddress().Hex(),
+		ChainID:                   config.GetChainID().String(),
+		EntrypointContractAddress: config.GetEntrypointContractAddress().Hex(),
+	})
 }
 
 func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -117,9 +149,7 @@ func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRes
 		return errorResp(500, fmt.Sprintf("failed to send HandleOps call: %s", err.Error()))
 	}
 
-	return events.APIGatewayProxyResponse{
-		StatusCode:      200,
-		Body:            fmt.Sprintf("{\"tx_hash\": \"%s\"}", txHash),
-		IsBase64Encoded: false,
-	}, nil
+	return successResp(HandleOpsResponse{
+		TxHash: txHash,
+	})
 }

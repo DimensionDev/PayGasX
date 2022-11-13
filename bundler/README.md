@@ -1,17 +1,5 @@
 # bundler
 
-This is a sample template for bundler - Below is a brief explanation of what we have generated for you:
-
-```bash
-.
-├── Makefile                    <-- Make to automate build
-├── README.md                   <-- This instructions file
-├── hello-world                 <-- Source code for a lambda function
-│   ├── main.go                 <-- Lambda function code
-│   └── main_test.go            <-- Unit tests
-└── template.yaml
-```
-
 ## Requirements
 
 * AWS CLI already configured with Administrator permission
@@ -21,15 +9,15 @@ This is a sample template for bundler - Below is a brief explanation of what we 
 
 ## Setup process
 
-### Installing dependencies & building the target 
+### Installing dependencies & building the target
 
-In this example we use the built-in `sam build` to automatically download all the dependencies and package our build target.   
-Read more about [SAM Build here](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-build.html) 
+In this example we use the built-in `sam build` to automatically download all the dependencies and package our build target.
+Read more about [SAM Build here](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-build.html)
 
 The `sam build` command is wrapped inside of the `Makefile`. To execute this simply run
- 
+
 ```shell
-make
+make build
 ```
 
 ### Local development
@@ -40,32 +28,9 @@ make
 sam local start-api
 ```
 
-If the previous command ran successfully you should now be able to hit the following local endpoint to invoke your function `http://localhost:3000/hello`
-
-**SAM CLI** is used to emulate both Lambda and API Gateway locally and uses our `template.yaml` to understand how to bootstrap this environment (runtime, where the source code is, etc.) - The following excerpt is what the CLI will read in order to initialize an API and its routes:
-
-```yaml
-...
-Events:
-    HelloWorld:
-        Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
-        Properties:
-            Path: /hello
-            Method: get
-```
+If the previous command ran successfully you should now be able to hit the following local endpoint to invoke your function `http://localhost:3000/healthz`
 
 ## Packaging and deployment
-
-AWS Lambda Golang runtime requires a flat folder with the executable generated on build step. SAM will use `CodeUri` property to know where to look up for the application:
-
-```yaml
-...
-    FirstFunction:
-        Type: AWS::Serverless::Function
-        Properties:
-            CodeUri: hello_world/
-            ...
-```
 
 To deploy your application for the first time, run the following in your shell:
 
@@ -85,56 +50,60 @@ You can find your API Gateway Endpoint URL in the output values displayed after 
 
 ### Testing
 
-We use `testing` package that is built-in in Golang and you can simply run the following command to run our tests:
+Unit test is not ready until we find out a way to generate testing payload.
 
-```shell
-go test -v ./hello-world/
-```
-# Appendix
+Manually tested though.
 
-### Golang installation
+## API
 
-Please ensure Go 1.x (where 'x' is the latest version) is installed as per the instructions on the official golang website: https://golang.org/doc/install
+### GET /healthz
 
-A quickstart way would be to use Homebrew, chocolatey or your linux package manager.
+Test server online status.
 
-#### Homebrew (Mac)
+- Response 200 (application/json)
 
-Issue the following command from the terminal:
+    - Attributes (object)
 
-```shell
-brew install golang
-```
+        - `hello` (string, required) - Value must be `bundler`.
+        - `bundler_eoa` (string, required) - EOA wallet of current bundler server instance.
+        - `chain_id` (string, required) - On which chain this server is working on.
+        - `entrypoint_contract_address` (string, required) - Which entrypoint contract this server is connected to.
 
-If it's already installed, run the following command to ensure it's the latest version:
+    - Body
 
-```shell
-brew update
-brew upgrade golang
-```
+        ```json
+        {
+            "hello": "bundler",
+            "bundler_eoa": "0x441D3F77bA64d427f31d215b504D9fF56301ACF6",
+            "chain_id": "80001",
+            "entrypoint_contract_address": "0x8A42F70047a99298822dD1dbA34b454fc49913F2"
+        }
+        ```
 
-#### Chocolatey (Windows)
+### POST /handle
 
-Issue the following command from the powershell:
+Send user operations to entrypoint contract.
 
-```shell
-choco install golang
-```
+- Request (application/json)
 
-If it's already installed, run the following command to ensure it's the latest version:
+> Refer to main document of this project (WIP) to find out meaning of these params.
 
-```shell
-choco upgrade golang
-```
+    - Attributes (object)
 
-## Bringing to the next level
+        - `user_operations` (Array[object], required) - UserOperations
+            - `sender` (string, required) - Should be wallet address like `0x123456abcdef...`
+            - `nonce` (string, required) - Numberish string to represent big number.
+            - `call_data` (string, required) - Should be Base64-encoded binary stream.
+            - `verification_gas` (string, required) - Numberish string to represent big number.
+            - `pre_verification_gas` (string, required) - Numberish string to represent big number.
+            - `max_fee_per_gas` (string, required) - Numberish string to represent big number.
+            - `max_priority_fee_per_gas` (string, required) - Numberish string to represent big number.
+            - `paymaster` (string, required) - Should be wallet address like `0x123456abcdef...`
+            - `paymaster_data` (string, required) - Should be Base64-encoded binary stream.
+            - `signature` (string, required) - Should be Base64-encoded binary stream.
 
-Here are a few ideas that you can use to get more acquainted as to how this overall process works:
+- Response 200 (application/json)
 
-* Create an additional API resource (e.g. /hello/{proxy+}) and return the name requested through this new path
-* Update unit test to capture that
-* Package & Deploy
+    - Attributes (object)
 
-Next, you can use the following resources to know more about beyond hello world samples and how others structure their Serverless applications:
-
-* [AWS Serverless Application Repository](https://aws.amazon.com/serverless/serverlessrepo/)
+        - `tx_hash` (string, required) - Transaction Hash.
