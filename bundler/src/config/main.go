@@ -1,14 +1,19 @@
 package config
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -18,7 +23,7 @@ var (
 type Config struct {
 	Chain ChainConfig `json:"chain"`
 	// Test can be nil in production env.
-	Test  *TestConfig `json:"test"`
+	Test *TestConfig `json:"test"`
 }
 
 type ChainConfig struct {
@@ -55,6 +60,45 @@ func InitFromFile(filename string) {
 	fmt.Printf("Bundler EOA address: %s\n", GetBundlerAddress().Hex())
 	fmt.Printf("Entrypoint contract address: %s\n", GetEntrypointContractAddress().Hex())
 
+}
+
+func InitFromAWSSecret() {
+	var secretName string
+	var ok bool
+	if secretName, ok = os.LookupEnv("SECRET_NAME"); !ok {
+		logrus.Fatalf("SECRET_NAME is not set")
+	}
+	ctx := context.Background()
+
+	// Create a Secrets Manager client
+	cfg, err := config.LoadDefaultConfig(
+		ctx,
+	)
+	if err != nil {
+		logrus.Fatalf("Unable to load SDK config: %v", err)
+	}
+
+	client := secretsmanager.NewFromConfig(cfg)
+	input := secretsmanager.GetSecretValueInput{
+		SecretId:     aws.String(secretName),
+		VersionStage: aws.String("AWSCURRENT"),
+	}
+	result, err := client.GetSecretValue(ctx, &input)
+	if err != nil {
+		logrus.Fatalf("Error when fetching secret: %s", err.Error())
+	}
+
+	// Decrypts secret using the associated KMS CMK.
+	// Depending on whether the secret is a string or binary, one of these fields will be populated.
+	if result.SecretString == nil {
+		logrus.Fatalf("cannot get secret string")
+	}
+	secretString := *result.SecretString
+
+	err = json.Unmarshal([]byte(secretString), &C)
+	if err != nil {
+		logrus.Fatalf("Error during parsing config JSON: %v", err)
+	}
 }
 
 func GetChainID() *big.Int {

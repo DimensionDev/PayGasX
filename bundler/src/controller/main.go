@@ -4,6 +4,7 @@ import (
 	"bundler/abi"
 	"bundler/eth"
 	"bundler/util"
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -18,7 +19,7 @@ var (
 )
 
 type HandleOpsRequest struct {
-	user_operations []UserOperation `json:"user_operations"`
+	UserOperations []UserOperation `json:"UserOperations"`
 }
 
 type UserOperation struct {
@@ -83,19 +84,27 @@ func errorResp(code int, body string) (events.APIGatewayProxyResponse, error) {
 	}, nil
 }
 
+func Healthz(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	return events.APIGatewayProxyResponse{
+		StatusCode:      200,
+		Body:            "OK",
+		IsBase64Encoded: false,
+	}, nil
+}
+
 func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	req := new(HandleOpsRequest)
-	err := json.Unmarshal([]byte(request.Body), req)
+	req := HandleOpsRequest{}
+	err := json.Unmarshal([]byte(request.Body), &req)
 	if err != nil {
 		return errorResp(400, "failed to parse request body")
 	}
 
-	if len(req.user_operations) == 0 {
+	if len(req.UserOperations) == 0 {
 		return errorResp(400, "no user operations")
 	}
 
-	abiUOs := make([]abi.UserOperation, len(req.user_operations))
-	for _, uo := range req.user_operations {
+	abiUOs := make([]abi.UserOperation, len(req.UserOperations))
+	for _, uo := range req.UserOperations {
 		abiUO, err := uo.ToABIStruct()
 		if err != nil {
 			return errorResp(400, fmt.Sprintf("failed to parse user operation: %s", err.Error()))
@@ -103,7 +112,7 @@ func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRes
 		abiUOs = append(abiUOs, abiUO)
 	}
 
-	txHash, err := eth.HandleOps(abiUOs)
+	txHash, err := eth.HandleOps(context.Background(), abiUOs)
 	if err != nil {
 		return errorResp(500, fmt.Sprintf("failed to send HandleOps call: %s", err.Error()))
 	}

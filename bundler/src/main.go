@@ -1,7 +1,7 @@
 package main
 
 import (
-	// "bundler/config"
+	"bundler/config"
 	"bundler/controller"
 	"bundler/eth"
 
@@ -10,6 +10,10 @@ import (
 )
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if request.HTTPMethod == "GET" && request.Path == "/healthz" {
+		return controller.Healthz(request)
+	}
+
 	if request.Path == "/handle" && request.HTTPMethod == "POST" {
 		return controller.HandleOps(request)
 	}
@@ -21,7 +25,7 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 }
 
 func init() {
-	// config.InitFromSecret() // TODO
+	config.InitFromAWSSecret()
 	eth.Init()
 }
 

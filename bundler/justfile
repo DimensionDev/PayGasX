@@ -1,7 +1,0 @@
-abigen:
-  -mkdir src/abi
-  jq .abi ../artifacts/contracts/EntryPoint.sol/EntryPoint.json > src/abi/EntryPoint.json
-  abigen --abi src/abi/EntryPoint.json --pkg abi --type EntryPoint --out src/abi/entrypoint.go
-
-build:
-	sam build
