@@ -94,6 +94,7 @@ Send user operations to entrypoint contract.
             - `sender` (string, required) - Should be wallet address like `0x123456abcdef...`
             - `nonce` (string, required) - Numberish string to represent big number.
             - `call_data` (string, required) - Should be Base64-encoded binary stream.
+            - `call_gas` (string, required) - Numberish string to represent big number.
             - `verification_gas` (string, required) - Numberish string to represent big number.
             - `pre_verification_gas` (string, required) - Numberish string to represent big number.
             - `max_fee_per_gas` (string, required) - Numberish string to represent big number.
