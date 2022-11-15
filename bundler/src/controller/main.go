@@ -134,14 +134,14 @@ func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRes
 	req := HandleOpsRequest{}
 	err := json.Unmarshal([]byte(request.Body), &req)
 	if err != nil {
-		return errorResp(400, "failed to parse request body")
+		return errorResp(400, fmt.Sprintf("failed to parse request body: %s", err.Error()))
 	}
 
 	if len(req.UserOperations) == 0 {
 		return errorResp(400, "no user operations")
 	}
 
-	abiUOs := make([]abi.UserOperation, len(req.UserOperations))
+	abiUOs := make([]abi.UserOperation, 0, len(req.UserOperations))
 	for _, uo := range req.UserOperations {
 		abiUO, err := uo.ToABIStruct()
 		if err != nil {
