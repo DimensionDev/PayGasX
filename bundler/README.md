@@ -93,6 +93,7 @@ Send user operations to entrypoint contract.
         - `user_operations` (Array[object], required) - UserOperations
             - `sender` (string, required) - Should be wallet address like `0x123456abcdef...`
             - `nonce` (string, required) - Numberish string to represent big number.
+            - `init_code` (string, required) - Should be Base64-encoded binary stream.
             - `call_data` (string, required) - Should be Base64-encoded binary stream.
             - `call_gas` (string, required) - Numberish string to represent big number.
             - `verification_gas` (string, required) - Numberish string to represent big number.

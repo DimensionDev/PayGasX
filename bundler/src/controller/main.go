@@ -37,6 +37,8 @@ type UserOperation struct {
 	// `big.Int`
 	Nonce *string `json:"nonce"`
 	// Base64 encoded bytes
+	InitCode *string `json:"init_code"`
+	// Base64 encoded bytes
 	CallData *string `json:"call_data"`
 	// `big.Int`
 	CallGas *string `json:"call_gas"`
@@ -70,6 +72,10 @@ func (uo *UserOperation) ToABIStruct() (abiUO abi.UserOperation, err error) {
 	abiUO.CallGas = util.ParseBigIntString(*uo.CallGas)
 	if err != nil {
 		return abi.UserOperation{}, xerrors.Errorf("failed to parse call data: %w", err)
+	}
+	abiUO.InitCode, err = util.ParseBase64String(*uo.InitCode)
+	if err != nil {
+		return abi.UserOperation{}, xerrors.Errorf("failed to parse init code: %w", err)
 	}
 	abiUO.VerificationGas = util.ParseBigIntString(*uo.VerificationGas)
 	abiUO.PreVerificationGas = util.ParseBigIntString(*uo.PreVerificationGas)
