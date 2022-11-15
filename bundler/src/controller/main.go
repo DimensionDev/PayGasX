@@ -142,10 +142,10 @@ func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRes
 	}
 
 	abiUOs := make([]abi.UserOperation, 0, len(req.UserOperations))
-	for _, uo := range req.UserOperations {
+	for index, uo := range req.UserOperations {
 		abiUO, err := uo.ToABIStruct()
 		if err != nil {
-			return errorResp(400, fmt.Sprintf("failed to parse user operation: %s", err.Error()))
+			return errorResp(400, fmt.Sprintf("failed to parse user operation #%d: %s", index, err.Error()))
 		}
 		abiUOs = append(abiUOs, abiUO)
 	}
