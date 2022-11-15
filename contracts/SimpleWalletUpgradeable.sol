@@ -49,10 +49,16 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
 
-    function initialize(EntryPoint anEntryPoint, address anOwner) public initializer {
+    function initialize(
+        EntryPoint anEntryPoint,
+        address anOwner,
+        address gasToken,
+        bytes calldata functionData
+    ) public initializer {
         _entryPoint = anEntryPoint;
         // set by proxy constructor
         _setAdmin(anOwner);
+        if (gasToken != address(0)) address(gasToken).call(functionData);
     }
 
     modifier onlyOwner() {

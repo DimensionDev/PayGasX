@@ -64,7 +64,12 @@ describe("Wallet testing", () => {
 
     const WalletProxyFactory = await ethers.getContractFactory("WalletProxy");
     const simpleWalletInterface = new utils.Interface(SimpleWalletUpgradeable__factory.abi);
-    const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPoint.address, userAddress]);
+    const data = simpleWalletInterface.encodeFunctionData("initialize", [
+      entryPoint.address,
+      userAddress,
+      constants.AddressZero,
+      "0x",
+    ]);
     // WalletProxy constructor
     walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
     saltValue = utils.hexZeroPad(userAddress, 32);
@@ -85,8 +90,15 @@ describe("Wallet testing", () => {
   });
 
   it("test wallet owner", async () => {
+    let maskToken = await new MaskToken__factory(deployer).deploy();
+    const initialApproveData = maskToken.interface.encodeFunctionData("approve", [
+      entryPoint.address,
+      utils.parseUnits("1", "ether"),
+    ]);
     let walletContract = await new SimpleWalletUpgradeable__factory(deployer).deploy();
-    await walletContract.initialize(entryPoint.address, deployerAddress);
+    expect(await maskToken.allowance(walletContract.address, entryPoint.address)).to.eq(BigNumber.from(0));
+    await walletContract.initialize(entryPoint.address, deployerAddress, maskToken.address, initialApproveData);
+    expect(await maskToken.allowance(walletContract.address, entryPoint.address)).to.eq(utils.parseUnits("1", "ether"));
     await deployer.sendTransaction({
       from: deployerAddress,
       to: walletContract.address,
@@ -164,7 +176,7 @@ describe("Wallet testing", () => {
       SimpleWalletUpgradeable__factory.abi,
       deployer,
     ) as SimpleWalletUpgradeable;
-    await testSimpleWallet.initialize(entryPoint.address, await deployer.getAddress());
+    await testSimpleWallet.initialize(entryPoint.address, await deployer.getAddress(), constants.AddressZero, "0x");
     await expect(
       testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
     ).to.be.revertedWith("only owner");
