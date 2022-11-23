@@ -9,7 +9,7 @@ import "./EntryPoint.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/utils/StorageSlot.sol";
 import "@gnosis.pm/safe-contracts/contracts/handler/DefaultCallbackHandler.sol";
-import "hardhat/console.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
@@ -53,12 +53,12 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
         EntryPoint anEntryPoint,
         address anOwner,
         address gasToken,
-        bytes calldata functionData
+        address paymaster,
+        uint256 amount
     ) public initializer {
         _entryPoint = anEntryPoint;
-        // set by proxy constructor
         _setAdmin(anOwner);
-        if (gasToken != address(0)) address(gasToken).call(functionData);
+        if (gasToken != address(0)) IERC20(gasToken).approve(paymaster, amount);
     }
 
     modifier onlyOwner() {
