@@ -3,7 +3,6 @@ import chaiAsPromised from "chai-as-promised";
 import { Signer, utils, Wallet } from "ethers";
 import { ethers } from "hardhat";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWallet.sol/SimpleWallet.json";
-import { UserOperation } from "../Objects/userOperation";
 import {
   DepositPaymaster,
   DepositPaymaster__factory,
@@ -19,6 +18,7 @@ import {
   VerifyingPaymaster__factory,
 } from "../types";
 import { AddressZero, MaxUint256, ONE_ETH, paymasterStake, TWO_ETH, unstakeDelaySec } from "./constants";
+import { UserOperation } from "./entity/userOperation";
 import { revertToSnapShot, takeSnapshot } from "./helper";
 import { createWallet, getContractWalletInfo, getPaymasterSignHash, signPaymasterHash, signUserOp } from "./utils";
 

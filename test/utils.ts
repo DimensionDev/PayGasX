@@ -1,5 +1,5 @@
 import { ecsign, keccak256 as keccak256_buffer, toRpcSig } from "ethereumjs-util";
-import { BigNumber, Wallet } from "ethers";
+import { BigNumber, BigNumberish, Wallet } from "ethers";
 import {
   arrayify,
   BytesLike,
@@ -8,13 +8,15 @@ import {
   hexlify,
   hexZeroPad,
   keccak256,
+  parseUnits,
 } from "ethers/lib/utils";
 import { ethers } from "hardhat";
-import { UserOperation } from "../Objects/userOperation";
+import { UserOperation } from "./entity/userOperation";
 
 import { utils } from "ethers";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
 import { SimpleWalletUpgradeable, SimpleWalletUpgradeable__factory, WalletProxy__factory } from "../types";
+import { AddressZero } from "./utils/const";
 
 export interface ContractWalletInfo {
   address: string;
@@ -160,11 +162,20 @@ export const signUserOp = (
 export const getContractWalletInfo = async (
   simpleWalletCreateSalt: number,
   entryPointAddress: string,
+  gasToken: string,
+  paymaster: string,
+  allowance: BigNumberish,
   ownerAddress: string,
   walletFactoryAddress: string,
 ): Promise<ContractWalletInfo> => {
   let contractFactory = await ethers.getContractFactory("SimpleWallet");
-  let initCode = contractFactory.getDeployTransaction(entryPointAddress, ownerAddress).data;
+  let initCode = contractFactory.getDeployTransaction(
+    entryPointAddress,
+    ownerAddress,
+    gasToken,
+    paymaster,
+    allowance,
+  ).data;
   if (!initCode) throw new Error("node data");
   const address = create2(walletFactoryAddress, simpleWalletCreateSalt, initCode);
   return {
@@ -195,3 +206,12 @@ export async function deployWallet(
   ) as SimpleWalletUpgradeable;
   return walletContract;
 }
+
+export const createDefaultUserOp = (sender: string): UserOperation => {
+  let userOp = new UserOperation();
+  userOp.sender = sender;
+  userOp.maxFeePerGas = parseUnits("1", "gwei");
+  userOp.maxPriorityFeePerGas = parseUnits("1", "gwei");
+  userOp.paymaster = AddressZero;
+  return userOp;
+};
