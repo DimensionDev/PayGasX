@@ -1,6 +1,7 @@
 import { use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { Signer, utils, Wallet } from "ethers";
+import { parseUnits } from "ethers/lib/utils";
 import { ethers } from "hardhat";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWallet.sol/SimpleWallet.json";
 import {
@@ -17,10 +18,16 @@ import {
   VerifyingPaymaster,
   VerifyingPaymaster__factory,
 } from "../types";
-import { AddressZero, MaxUint256, ONE_ETH, paymasterStake, TWO_ETH, unstakeDelaySec } from "./constants";
-import { UserOperation } from "./entity/userOperation";
+import { AddressZero, MaxUint256, ONE_ETH, paymasterStake, unstakeDelaySec } from "./constants";
 import { revertToSnapShot, takeSnapshot } from "./helper";
-import { createWallet, getContractWalletInfo, getPaymasterSignHash, signPaymasterHash, signUserOp } from "./utils";
+import {
+  createDefaultUserOp,
+  createWallet,
+  getContractWalletInfo,
+  getPaymasterSignHash,
+  signPaymasterHash,
+  signUserOp,
+} from "./utils";
 
 const { expect } = use(chaiAsPromised);
 const walletInterface = new utils.Interface(SimpleWalletArtifact.abi);
@@ -43,9 +50,11 @@ describe("EntryPoint with Verifying Paymaster", () => {
   let entryPointStatic: EntryPoint;
   let mainPaymaster: DepositPaymaster;
   let walletFactory: SingletonFactory;
-  let mask: MaskToken;
+  let maskToken: MaskToken;
+  let chainId: number;
 
   before(async () => {
+    chainId = (await hardhatProvider.getNetwork()).chainId;
     signers = await ethers.getSigners();
     contractCreator = signers[0];
     creatorAddress = await contractCreator.getAddress();
@@ -56,9 +65,6 @@ describe("EntryPoint with Verifying Paymaster", () => {
     offChainSigner = createWallet();
     walletOwner = createWallet();
 
-    const sponsorBalance = await sponsor.getBalance();
-    if (sponsorBalance < ONE_ETH) throw new Error("Sponsor balance not enough");
-
     walletFactory = await new SingletonFactory__factory(contractCreator).deploy();
     entryPoint = await new EntryPoint__factory(contractCreator).deploy(
       walletFactory.address,
@@ -67,14 +73,14 @@ describe("EntryPoint with Verifying Paymaster", () => {
     );
     entryPointStatic = entryPoint.connect(AddressZero);
 
-    mask = await new MaskToken__factory(contractCreator).deploy();
+    maskToken = await new MaskToken__factory(contractCreator).deploy();
 
-    mainPaymaster = await new DepositPaymaster__factory(contractCreator).deploy(entryPoint.address, mask.address);
+    mainPaymaster = await new DepositPaymaster__factory(contractCreator).deploy(entryPoint.address, maskToken.address);
 
     paymaster = await new VerifyingPaymaster__factory(contractCreator).deploy(
       entryPoint.address,
       offChainSigner.address,
-      mask.address,
+      maskToken.address,
       mainPaymaster.address,
     );
 
@@ -90,36 +96,41 @@ describe("EntryPoint with Verifying Paymaster", () => {
     await revertToSnapShot(snapshotId);
   });
 
+  // approve $MASK to mainPaymaster (i.e. target contract)
   it("Should call $MASK approve() through paymaster successfully", async () => {
     let simpleWalletCreateSalt = 0;
     const contractWallet = await getContractWalletInfo(
       simpleWalletCreateSalt,
       entryPoint.address,
+      maskToken.address,
+      paymaster.address,
+      parseUnits("1", "ether"),
       walletOwner.address,
       walletFactory.address,
     );
 
-    let approveUserOp = new UserOperation();
-    approveUserOp.sender = contractWallet.address;
-    approveUserOp.maxFeePerGas = utils.parseUnits("1", "gwei");
-    approveUserOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+    let approveUserOp = createDefaultUserOp(contractWallet.address);
     approveUserOp.paymaster = paymaster.address;
     approveUserOp.initCode = contractWallet.initCode;
     approveUserOp.nonce = 0;
 
-    const approveData = mask.interface.encodeFunctionData("approve", [mainPaymaster.address, MaxUint256]);
-    approveUserOp.callData = walletInterface.encodeFunctionData("execFromEntryPoint", [mask.address, 0, approveData]);
+    const approveData = maskToken.interface.encodeFunctionData("approve", [mainPaymaster.address, MaxUint256]);
+    approveUserOp.callData = walletInterface.encodeFunctionData("execFromEntryPoint", [
+      maskToken.address,
+      0,
+      approveData,
+    ]);
 
     await approveUserOp.estimateGas(hardhatProvider, entryPoint.address);
 
     const paymasterSignHash = getPaymasterSignHash(approveUserOp);
     approveUserOp.paymasterData = signPaymasterHash(paymasterSignHash, offChainSigner.privateKey);
 
-    const chainId = (await hardhatProvider.getNetwork()).chainId;
     approveUserOp.signature = signUserOp(approveUserOp, entryPoint.address, chainId, walletOwner.privateKey);
 
     await entryPoint.connect(sponsor).handleOps([approveUserOp], beneficiaryAddress);
-    const allowance = await mask.allowance(contractWallet.address, mainPaymaster.address);
+
+    const allowance = await maskToken.allowance(contractWallet.address, mainPaymaster.address);
     expect(allowance).to.be.eq(MaxUint256);
   });
 
@@ -128,16 +139,16 @@ describe("EntryPoint with Verifying Paymaster", () => {
     const contractWallet = await getContractWalletInfo(
       simpleWalletCreateSalt,
       entryPoint.address,
+      maskToken.address,
+      paymaster.address,
+      parseUnits("1", "ether"),
       walletOwner.address,
       walletFactory.address,
     );
 
     testToken = await new TestToken__factory(contractCreator).deploy();
 
-    let userOp = new UserOperation();
-    userOp.sender = contractWallet.address;
-    userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
-    userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+    let userOp = createDefaultUserOp(contractWallet.address);
     userOp.paymaster = paymaster.address;
     userOp.initCode = contractWallet.initCode;
     userOp.nonce = 0;
@@ -150,7 +161,6 @@ describe("EntryPoint with Verifying Paymaster", () => {
     const paymasterSignHash = getPaymasterSignHash(userOp);
     userOp.paymasterData = signPaymasterHash(paymasterSignHash, offChainSigner.privateKey);
 
-    const chainId = (await hardhatProvider.getNetwork()).chainId;
     userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
 
     await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
@@ -158,47 +168,14 @@ describe("EntryPoint with Verifying Paymaster", () => {
     );
   });
 
-  it("Should call $MASK transfer through paymaster fail", async () => {
+  it("Should directly transfer $ETH through paymaster fail", async () => {
     let simpleWalletCreateSalt = 0;
     const contractWallet = await getContractWalletInfo(
       simpleWalletCreateSalt,
       entryPoint.address,
-      walletOwner.address,
-      walletFactory.address,
-    );
-
-    await mask.connect(contractCreator).transfer(contractWallet.address, 100);
-
-    let userOp = new UserOperation();
-    userOp.sender = contractWallet.address;
-    userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
-    userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-    userOp.paymaster = paymaster.address;
-    userOp.initCode = contractWallet.initCode;
-    userOp.nonce = 0;
-
-    const transferData = mask.interface.encodeFunctionData("transfer", [mainPaymaster.address, 50]);
-    userOp.callData = walletInterface.encodeFunctionData("execFromEntryPoint", [mask.address, 0, transferData]);
-
-    await userOp.estimateGas(hardhatProvider, entryPoint.address);
-
-    const paymasterSignHash = getPaymasterSignHash(userOp);
-    userOp.paymasterData = signPaymasterHash(paymasterSignHash, offChainSigner.privateKey);
-
-    const chainId = (await hardhatProvider.getNetwork()).chainId;
-    userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
-
-    //reverted with "VerifyingPaymaster: Unsupported operation"
-    await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
-      "VerifyingPaymaster: operation not in sponsored operation",
-    );
-  });
-
-  it("Should directly transfer ETH through paymaster fail", async () => {
-    let simpleWalletCreateSalt = 0;
-    const contractWallet = await getContractWalletInfo(
-      simpleWalletCreateSalt,
-      entryPoint.address,
+      maskToken.address,
+      paymaster.address,
+      parseUnits("1", "ether"),
       walletOwner.address,
       walletFactory.address,
     );
@@ -208,13 +185,10 @@ describe("EntryPoint with Verifying Paymaster", () => {
 
     await sponsor.sendTransaction({
       to: contractWallet.address,
-      value: TWO_ETH,
+      value: ONE_ETH,
     });
 
-    let userOp = new UserOperation();
-    userOp.sender = contractWallet.address;
-    userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
-    userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+    let userOp = createDefaultUserOp(contractWallet.address);
     userOp.paymaster = paymaster.address;
     userOp.initCode = contractWallet.initCode;
     userOp.nonce = 0;
@@ -225,9 +199,7 @@ describe("EntryPoint with Verifying Paymaster", () => {
     const paymasterSignHash = getPaymasterSignHash(userOp);
     userOp.paymasterData = signPaymasterHash(paymasterSignHash, offChainSigner.privateKey);
 
-    const chainId = (await hardhatProvider.getNetwork()).chainId;
     userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
-
     await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
       "VerifyingPaymaster: operation not in sponsored operation",
     );

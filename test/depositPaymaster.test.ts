@@ -22,8 +22,7 @@ import SimpleWalletArtifact from "../artifacts/contracts/SimpleWallet.sol/Simple
 import { AddressZero, creationParams, MaxUint256, paymasterStake, unstakeDelaySec } from "./constants";
 import { UserOperation } from "./entity/userOperation";
 import { revertToSnapShot, takeSnapshot } from "./helper";
-import { ContractWalletInfo, createDefaultUserOp, createWallet, getContractWalletInfo } from "./utils";
-import { signUserOp } from "./utils/UserOp";
+import { ContractWalletInfo, createDefaultUserOp, createWallet, getContractWalletInfo, signUserOp } from "./utils";
 const hardhatProvider = ethers.provider;
 
 describe("DepositPaymaster", () => {

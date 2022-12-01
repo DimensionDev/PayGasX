@@ -16,7 +16,7 @@ import { UserOperation } from "./entity/userOperation";
 import { utils } from "ethers";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
 import { SimpleWalletUpgradeable, SimpleWalletUpgradeable__factory, WalletProxy__factory } from "../types";
-import { AddressZero } from "./utils/const";
+import { AddressZero } from "./constants";
 
 export interface ContractWalletInfo {
   address: string;
@@ -187,12 +187,21 @@ export const getContractWalletInfo = async (
 export async function deployWallet(
   entryPointAddress,
   ownerAddress,
+  gasToken,
+  paymaster,
+  allowance,
   signer = ethers.provider.getSigner(),
 ): Promise<SimpleWalletUpgradeable> {
   const walletLogicContract = await new SimpleWalletUpgradeable__factory(signer).deploy();
 
   const simpleWalletInterface = new utils.Interface(SimpleWalletArtifact.abi);
-  const data = simpleWalletInterface.encodeFunctionData("initialize", [entryPointAddress, ownerAddress]);
+  const data = simpleWalletInterface.encodeFunctionData("initialize", [
+    entryPointAddress,
+    ownerAddress,
+    gasToken,
+    paymaster,
+    allowance,
+  ]);
 
   const wallet = await new WalletProxy__factory(signer).deploy(ownerAddress, walletLogicContract.address, data);
 
