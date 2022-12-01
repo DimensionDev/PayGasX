@@ -6,6 +6,7 @@ import "./BaseWallet.sol";
 import "./lib/ECDSA.sol";
 import "./lib/UserOperation.sol";
 import "./EntryPoint.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
@@ -40,9 +41,16 @@ contract SimpleWallet is BaseWallet {
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
 
-    constructor(EntryPoint anEntryPoint, address anOwner) {
+    constructor(
+        EntryPoint anEntryPoint,
+        address anOwner,
+        address gasToken,
+        address paymaster,
+        uint256 amount
+    ) {
         _entryPoint = anEntryPoint;
         owner = anOwner;
+        if (gasToken != address(0)) IERC20(gasToken).approve(paymaster, amount);
     }
 
     modifier onlyOwner() {

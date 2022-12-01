@@ -14,7 +14,6 @@ import {
   SingletonFactory__factory,
   TESTNFT__factory,
   VerifyingPaymaster__factory,
-  WalletProxy,
   WalletProxy__factory,
 } from "../types";
 import { MaskToken } from "../types/contracts/test/MaskToken";
@@ -37,7 +36,7 @@ describe("Wallet testing", () => {
 
   let entryPoint: EntryPoint;
   let entryPointStatic: EntryPoint;
-  let walletProxy: WalletProxy;
+  let simpleWallet: SimpleWalletUpgradeable;
   let walletLogic: SimpleWalletUpgradeable;
   let singletonFactory: SingletonFactory;
   let walletProxyAddress: string;
@@ -57,18 +56,18 @@ describe("Wallet testing", () => {
     beneficialAccountAddress = await beneficialAccount.getAddress();
     chainId = network.config.chainId!;
 
-    let simpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
+    simpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
     singletonFactory = await new SingletonFactory__factory(deployer).deploy();
     entryPoint = await new EntryPoint__factory(deployer).deploy(singletonFactory.address, 10, 10);
     entryPointStatic = entryPoint.connect(AddressZero);
 
     const WalletProxyFactory = await ethers.getContractFactory("WalletProxy");
-    const simpleWalletInterface = new utils.Interface(SimpleWalletUpgradeable__factory.abi);
-    const data = simpleWalletInterface.encodeFunctionData("initialize", [
+    const data = simpleWallet.interface.encodeFunctionData("initialize", [
       entryPoint.address,
       userAddress,
       constants.AddressZero,
-      "0x",
+      constants.AddressZero,
+      0,
     ]);
     // WalletProxy constructor
     walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
@@ -78,9 +77,7 @@ describe("Wallet testing", () => {
       saltValue,
       utils.keccak256(walletProxyInitCode),
     );
-    console.log("predict wallet addr: ", walletAddress);
     walletProxyAddress = walletAddress;
-    walletProxy = new ethers.Contract(walletProxyAddress, WalletProxy__factory.abi, deployer) as WalletProxy;
     walletLogic = new ethers.Contract(
       walletProxyAddress,
       SimpleWalletUpgradeable__factory.abi,
@@ -91,13 +88,15 @@ describe("Wallet testing", () => {
 
   it("test wallet owner", async () => {
     let maskToken = await new MaskToken__factory(deployer).deploy();
-    const initialApproveData = maskToken.interface.encodeFunctionData("approve", [
-      entryPoint.address,
-      utils.parseUnits("1", "ether"),
-    ]);
     let walletContract = await new SimpleWalletUpgradeable__factory(deployer).deploy();
     expect(await maskToken.allowance(walletContract.address, entryPoint.address)).to.eq(BigNumber.from(0));
-    await walletContract.initialize(entryPoint.address, deployerAddress, maskToken.address, initialApproveData);
+    await walletContract.initialize(
+      entryPoint.address,
+      deployerAddress,
+      maskToken.address,
+      entryPoint.address,
+      utils.parseUnits("1", "ether"),
+    );
     expect(await maskToken.allowance(walletContract.address, entryPoint.address)).to.eq(utils.parseUnits("1", "ether"));
     await deployer.sendTransaction({
       from: deployerAddress,
@@ -124,7 +123,6 @@ describe("Wallet testing", () => {
     userOperation.maxFeePerGas = gasFee.Max;
     userOperation.maxPriorityFeePerGas = gasFee.MaxPriority;
     userOperation.paymaster = constants.AddressZero;
-    await userOperation.estimateGas(ethers.provider, entryPoint.address);
 
     // deploy wallet, check if wallet address match
     await singletonFactory.deploy(walletProxyInitCode, saltValue);
@@ -133,16 +131,9 @@ describe("Wallet testing", () => {
     expect((await ethers.provider.getCode(walletProxyAddress)) == "0x").to.be.false;
     expect(events[0].args[0]).to.eql(walletProxyAddress);
     expect(await walletLogic.entryPoint()).to.eql(entryPoint.address);
-
-    if ((await ethers.provider.getCode(walletProxyAddress)) === "0x") {
-      // should not reach here
-      userOperation.initCode = walletProxyInitCode;
-      userOperation.nonce = 0;
-    } else {
-      await walletLogic.addDeposit({ value: utils.parseUnits("1", "ether") });
-      expect(await walletLogic.getDeposit()).to.eql(utils.parseUnits("1", "ether"));
-      userOperation.nonce = await walletLogic.nonce();
-    }
+    await walletLogic.addDeposit({ value: utils.parseUnits("1", "ether") });
+    expect(await walletLogic.getDeposit()).to.eql(utils.parseUnits("1", "ether"));
+    userOperation.nonce = await walletLogic.nonce();
     //transfer ether from simpleWallet for test
     await deployer.sendTransaction({
       from: deployerAddress,
@@ -154,6 +145,7 @@ describe("Wallet testing", () => {
       utils.parseUnits("0.1", "ether"),
       "0x",
     ]);
+    await userOperation.estimateGas(ethers.provider, entryPoint.address);
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
     let sponsorInitialBal = await ethers.provider.getBalance(sponsorAddress);
     const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
@@ -176,7 +168,13 @@ describe("Wallet testing", () => {
       SimpleWalletUpgradeable__factory.abi,
       deployer,
     ) as SimpleWalletUpgradeable;
-    await testSimpleWallet.initialize(entryPoint.address, await deployer.getAddress(), constants.AddressZero, "0x");
+    await testSimpleWallet.initialize(
+      entryPoint.address,
+      await deployer.getAddress(),
+      constants.AddressZero,
+      constants.AddressZero,
+      0,
+    );
     await expect(
       testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
     ).to.be.revertedWith("only owner");
@@ -186,12 +184,14 @@ describe("Wallet testing", () => {
   describe("test paymaster", async () => {
     let maskToken: MaskToken;
     let depositPaymaster: DepositPaymaster;
-    it("test paymaster", async () => {
+    it("test normal workflow", async () => {
       maskToken = await new MaskToken__factory(deployer).deploy();
-
+      await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
       depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
       await depositPaymaster.addStake(0, { value: utils.parseEther("2") });
-
+      await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
+      await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
+      await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
       let verifyingPaymaster = await new VerifyingPaymaster__factory(deployer).deploy(
         entryPoint.address,
         userAddress, // paymaster signer for verifying signature
@@ -201,61 +201,59 @@ describe("Wallet testing", () => {
       await verifyingPaymaster.deposit({ value: utils.parseEther("1") });
       await verifyingPaymaster.addStake(0, { value: utils.parseEther("1") });
 
-      let userOp = new UserOperation();
-      userOp.sender = walletProxyAddress;
-      userOp.maxFeePerGas = utils.parseUnits("1", "gwei");
-      userOp.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-      userOp.paymaster = verifyingPaymaster.address;
-      userOp.initCode = "0x";
-      userOp.nonce = await walletLogic.nonce();
+      let userOp1 = new UserOperation();
+      userOp1.sender = walletProxyAddress;
+      userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
+      userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+      userOp1.paymaster = verifyingPaymaster.address;
+      userOp1.initCode = "0x";
+      userOp1.nonce = await walletLogic.nonce();
 
       const approveData = maskToken.interface.encodeFunctionData("approve", [
         depositPaymaster.address,
         constants.MaxUint256,
       ]);
-      userOp.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+      userOp1.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
         maskToken.address,
         0,
         approveData,
       ]);
-      await userOp.estimateGas(ethers.provider, entryPoint.address);
+      await userOp1.estimateGas(ethers.provider, entryPoint.address);
 
-      const paymasterSignHash = getPayMasterSignHash(userOp);
-      userOp.paymasterData = signPayMasterHash(paymasterSignHash, userPrivateKey);
+      const paymasterSignHash = getPayMasterSignHash(userOp1);
+      userOp1.paymasterData = signPayMasterHash(paymasterSignHash, userPrivateKey);
 
-      userOp.signature = signUserOp(userOp, entryPoint.address, chainId, userPrivateKey);
-      let result = await entryPointStatic.callStatic.simulateValidation(userOp);
-      console.log(result);
+      userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
 
-      await entryPoint.handleOps([userOp], beneficialAccountAddress);
-      expect(await maskToken.allowance(walletProxyAddress, depositPaymaster.address)).to.be.eq(constants.MaxUint256);
-      await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
-      await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
-      await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
-      await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
-      let userOp1 = new UserOperation();
-      userOp1.sender = walletProxyAddress;
-      userOp1.nonce = await walletLogic.nonce();
-      userOp.initCode = "0x";
-      userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
-      userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
-      userOp1.paymaster = depositPaymaster.address;
-      userOp1.paymasterData = utils.hexZeroPad(maskToken.address, 32);
+      let userOp2 = new UserOperation();
+      userOp2.sender = walletProxyAddress;
+      userOp2.nonce = userOp1.nonce; // when calling simulateValidation(), nonce would be the same
+      userOp2.initCode = "0x";
+      userOp2.maxFeePerGas = utils.parseUnits("1", "gwei");
+      userOp2.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+      userOp2.paymaster = depositPaymaster.address;
+      userOp2.paymasterData = utils.hexZeroPad(maskToken.address, 32);
       const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [
         verifyingPaymaster.address,
         constants.MaxUint256,
       ]);
-      userOp1.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+      userOp2.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
         maskToken.address,
         0,
         tokenApprovePaymaster,
       ]);
-      await userOp1.estimateGas(ethers.provider, entryPoint.address);
-      userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
+      await userOp2.estimateGas(ethers.provider, entryPoint.address);
+      userOp2.signature = signUserOp(userOp2, entryPoint.address, chainId, userPrivateKey);
 
-      result = await entryPointStatic.callStatic.simulateValidation(userOp1);
+      let result = await entryPointStatic.callStatic.simulateValidation(userOp1);
       console.log(result);
-      await entryPoint.handleOps([userOp1], beneficialAccountAddress);
+      result = await entryPointStatic.callStatic.simulateValidation(userOp2);
+      console.log(result);
+      // when putting two userOpt in one tx, we have to calculate the nonce manually, and re-sign the userOpt
+      userOp2.nonce = userOp1.nonce.add(1);
+      userOp2.signature = signUserOp(userOp2, entryPoint.address, chainId, userPrivateKey);
+      await entryPoint.handleOps([userOp1, userOp2], beneficialAccountAddress);
+      expect(await maskToken.allowance(walletProxyAddress, depositPaymaster.address)).to.be.eq(constants.MaxUint256);
       expect(await maskToken.allowance(walletProxyAddress, verifyingPaymaster.address)).to.eq(constants.MaxUint256);
     });
 
@@ -263,6 +261,53 @@ describe("Wallet testing", () => {
       const testNft = await new TESTNFT__factory(deployer).deploy();
       await testNft.connect(deployer).mint(walletLogic.address, 0);
       expect(await testNft.ownerOf(0)).eq(walletLogic.address);
+    });
+
+    it("test deploy and send tx in the same tx", async () => {
+      let userOperation: UserOperation = new UserOperation();
+      let salt = utils.hexZeroPad("0x0", 32);
+      const data = walletLogic.interface.encodeFunctionData("initialize", [
+        entryPoint.address,
+        userAddress,
+        maskToken.address,
+        depositPaymaster.address,
+        utils.parseEther("200"),
+      ]);
+      // WalletProxy constructor
+      const WalletProxyFactory = await ethers.getContractFactory("WalletProxy");
+      walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
+      let walletAddress = utils.getCreate2Address(singletonFactory.address, salt, utils.keccak256(walletProxyInitCode));
+      await maskToken.transfer(walletAddress, utils.parseEther("55"));
+      await depositPaymaster.addDepositFor(walletAddress, utils.parseEther("200"));
+      userOperation.sender = walletAddress;
+      userOperation.initCode = walletProxyInitCode;
+      userOperation.nonce = 0; // should match salt value if deploying through EP
+      expect((await ethers.provider.getCode(walletAddress)) == "0x").to.be.true;
+      let gasFee = {
+        Max: BigNumber.from(5e9),
+        MaxPriority: BigNumber.from(5e9),
+      };
+      userOperation.maxFeePerGas = gasFee.Max;
+      userOperation.maxPriorityFeePerGas = gasFee.MaxPriority;
+      userOperation.paymaster = depositPaymaster.address;
+      userOperation.paymasterData = utils.hexZeroPad(maskToken.address, 32);
+      const transferData = maskToken.interface.encodeFunctionData("transfer", [
+        sponsorAddress,
+        utils.parseUnits("1", "ether"),
+      ]);
+      userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+        maskToken.address,
+        0,
+        transferData,
+      ]);
+      await userOperation.estimateGas(ethers.provider, entryPoint.address);
+      userOperation.callGas = BigNumber.from(2).mul(userOperation.callGas); // FIXME: provider.estimateGas doesn't return enough gas to complete the tx
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+      let sponsorInitialBal = await maskToken.balanceOf(sponsorAddress);
+      const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
+      console.log(`simulateValidation result:`, result);
+      await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+      expect(await maskToken.balanceOf(sponsorAddress)).to.eq(sponsorInitialBal.add(utils.parseUnits("1", "ether")));
     });
   });
 });
