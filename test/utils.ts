@@ -185,11 +185,11 @@ export const getContractWalletInfo = async (
 };
 
 export async function deployWallet(
-  entryPointAddress,
-  ownerAddress,
-  gasToken,
-  paymaster,
-  allowance,
+  entryPointAddress: string,
+  ownerAddress: string,
+  gasToken: string,
+  paymaster: string,
+  allowance: BigNumberish,
   signer = ethers.provider.getSigner(),
 ): Promise<SimpleWalletUpgradeable> {
   const walletLogicContract = await new SimpleWalletUpgradeable__factory(signer).deploy();

@@ -79,7 +79,7 @@ class UserOperation {
    * @param web3 web3 instance
    * @param entryPointAddress entry point address
    */
-  private async estimateCallGas(provider: any, entryPointAddress) {
+  private async estimateCallGas(provider: any, entryPointAddress: string) {
     const calldata: string = this.callData as string;
     const estimatedGas =
       (
@@ -97,7 +97,7 @@ class UserOperation {
    * @param web3 web3 instance
    * @param entryPointAddress entry point address
    */
-  public async estimateGas(provider: any, entryPointAddress) {
+  public async estimateGas(provider: any, entryPointAddress: string) {
     this.estimateVerificationGas();
     await this.estimateCallGas(provider, entryPointAddress);
   }
