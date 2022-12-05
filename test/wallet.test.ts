@@ -17,9 +17,9 @@ import {
   WalletProxy__factory,
 } from "../types";
 import { MaskToken } from "../types/contracts/test/MaskToken";
+import { AddressZero } from "./constants";
 import { UserOperation } from "./entity/userOperation";
-import { AddressZero } from "./utils/const";
-import { getPayMasterSignHash, signPayMasterHash, signUserOp } from "./utils/UserOp";
+import { getPaymasterSignHash, signPaymasterHash, signUserOp } from "./utils";
 
 const { expect } = use(chaiAsPromised);
 
@@ -220,8 +220,8 @@ describe("Wallet testing", () => {
       ]);
       await userOp1.estimateGas(ethers.provider, entryPoint.address);
 
-      const paymasterSignHash = getPayMasterSignHash(userOp1);
-      userOp1.paymasterData = signPayMasterHash(paymasterSignHash, userPrivateKey);
+      const paymasterSignHash = getPaymasterSignHash(userOp1);
+      userOp1.paymasterData = signPaymasterHash(paymasterSignHash, userPrivateKey);
 
       userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
 
