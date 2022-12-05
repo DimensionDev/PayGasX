@@ -7,6 +7,7 @@ import {
   DepositPaymaster__factory,
   EntryPoint,
   EntryPoint__factory,
+  MaskToken,
   MaskToken__factory,
   SimpleWalletUpgradeable,
   SimpleWalletUpgradeable__factory,
@@ -16,10 +17,9 @@ import {
   VerifyingPaymaster__factory,
   WalletProxy__factory,
 } from "../types";
-import { MaskToken } from "../types/contracts/test/MaskToken";
-import { AddressZero } from "./constants";
+import { AddressZero, ONE_ETH, TWO_ETH } from "./constants";
 import { UserOperation } from "./entity/userOperation";
-import { getPaymasterSignHash, signPaymasterHash, signUserOp } from "./utils";
+import { createDefaultUserOp, getPaymasterSignHash, signPaymasterHash, signUserOp } from "./utils";
 
 const { expect } = use(chaiAsPromised);
 
@@ -46,15 +46,14 @@ describe("Wallet testing", () => {
   let chainId: number;
 
   before(async () => {
+    chainId = network.config.chainId!;
+    userPrivateKey = Wallet.createRandom().privateKey;
+    userSigner = new Wallet(userPrivateKey, ethers.provider);
+    userAddress = await userSigner.getAddress();
     [deployer, beneficialAccount, sponsorSigner] = await ethers.getSigners();
     deployerAddress = await deployer.getAddress();
     sponsorAddress = await sponsorSigner.getAddress();
-    userPrivateKey = Wallet.createRandom().privateKey;
-    userSigner = new Wallet(userPrivateKey, ethers.provider);
-
-    userAddress = await userSigner.getAddress();
     beneficialAccountAddress = await beneficialAccount.getAddress();
-    chainId = network.config.chainId!;
 
     simpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
     singletonFactory = await new SingletonFactory__factory(deployer).deploy();
@@ -65,8 +64,8 @@ describe("Wallet testing", () => {
     const data = simpleWallet.interface.encodeFunctionData("initialize", [
       entryPoint.address,
       userAddress,
-      constants.AddressZero,
-      constants.AddressZero,
+      AddressZero,
+      AddressZero,
       0,
     ]);
     // WalletProxy constructor
@@ -95,34 +94,23 @@ describe("Wallet testing", () => {
       deployerAddress,
       maskToken.address,
       entryPoint.address,
-      utils.parseUnits("1", "ether"),
+      ONE_ETH,
     );
-    expect(await maskToken.allowance(walletContract.address, entryPoint.address)).to.eq(utils.parseUnits("1", "ether"));
+    expect(await maskToken.allowance(walletContract.address, entryPoint.address)).to.eq(ONE_ETH);
     await deployer.sendTransaction({
       from: deployerAddress,
       to: walletContract.address,
-      value: utils.parseUnits("2", "ether"),
+      value: TWO_ETH,
     });
-    await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(utils.parseUnits("2", "ether"));
-    await walletContract.transfer(beneficialAccountAddress, utils.parseUnits("1", "ether"));
-    await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(utils.parseUnits("1", "ether"));
+    await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(TWO_ETH);
+    await walletContract.transfer(beneficialAccountAddress, ONE_ETH);
+    await expect(await ethers.provider.getBalance(walletContract.address)).to.be.eq(ONE_ETH);
     await walletContract.changeOwner(beneficialAccountAddress);
-    await expect(walletContract.transfer(beneficialAccountAddress, utils.parseUnits("1", "ether"))).to.be.revertedWith(
-      "only owner",
-    );
+    await expect(walletContract.transfer(beneficialAccountAddress, ONE_ETH)).to.be.revertedWith("only owner");
   });
 
   it("test wallet without paymaster", async () => {
-    let userOperation: UserOperation = new UserOperation();
-    userOperation.sender = walletProxyAddress;
-    // TODO: calculate actual fee
-    let gasFee = {
-      Max: BigNumber.from(2e9),
-      MaxPriority: BigNumber.from(1e9),
-    };
-    userOperation.maxFeePerGas = gasFee.Max;
-    userOperation.maxPriorityFeePerGas = gasFee.MaxPriority;
-    userOperation.paymaster = constants.AddressZero;
+    let userOperation: UserOperation = createDefaultUserOp(walletProxyAddress);
 
     // deploy wallet, check if wallet address match
     await singletonFactory.deploy(walletProxyInitCode, saltValue);
@@ -131,14 +119,14 @@ describe("Wallet testing", () => {
     expect((await ethers.provider.getCode(walletProxyAddress)) == "0x").to.be.false;
     expect(events[0].args[0]).to.eql(walletProxyAddress);
     expect(await walletLogic.entryPoint()).to.eql(entryPoint.address);
-    await walletLogic.addDeposit({ value: utils.parseUnits("1", "ether") });
-    expect(await walletLogic.getDeposit()).to.eql(utils.parseUnits("1", "ether"));
+    await walletLogic.addDeposit({ value: ONE_ETH });
+    expect(await walletLogic.getDeposit()).to.eql(ONE_ETH);
     userOperation.nonce = await walletLogic.nonce();
     //transfer ether from simpleWallet for test
     await deployer.sendTransaction({
       from: deployerAddress,
       to: walletProxyAddress,
-      value: utils.parseUnits("2", "ether"),
+      value: TWO_ETH,
     });
     userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
       sponsorAddress,
@@ -168,13 +156,7 @@ describe("Wallet testing", () => {
       SimpleWalletUpgradeable__factory.abi,
       deployer,
     ) as SimpleWalletUpgradeable;
-    await testSimpleWallet.initialize(
-      entryPoint.address,
-      await deployer.getAddress(),
-      constants.AddressZero,
-      constants.AddressZero,
-      0,
-    );
+    await testSimpleWallet.initialize(entryPoint.address, await deployer.getAddress(), AddressZero, AddressZero, 0);
     await expect(
       testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
     ).to.be.revertedWith("only owner");
@@ -201,10 +183,7 @@ describe("Wallet testing", () => {
       await verifyingPaymaster.deposit({ value: utils.parseEther("1") });
       await verifyingPaymaster.addStake(0, { value: utils.parseEther("1") });
 
-      let userOp1 = new UserOperation();
-      userOp1.sender = walletProxyAddress;
-      userOp1.maxFeePerGas = utils.parseUnits("1", "gwei");
-      userOp1.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
+      let userOp1 = createDefaultUserOp(walletProxyAddress);
       userOp1.paymaster = verifyingPaymaster.address;
       userOp1.initCode = "0x";
       userOp1.nonce = await walletLogic.nonce();
@@ -225,12 +204,8 @@ describe("Wallet testing", () => {
 
       userOp1.signature = signUserOp(userOp1, entryPoint.address, chainId, userPrivateKey);
 
-      let userOp2 = new UserOperation();
-      userOp2.sender = walletProxyAddress;
+      let userOp2 = createDefaultUserOp(walletProxyAddress);
       userOp2.nonce = userOp1.nonce; // when calling simulateValidation(), nonce would be the same
-      userOp2.initCode = "0x";
-      userOp2.maxFeePerGas = utils.parseUnits("1", "gwei");
-      userOp2.maxPriorityFeePerGas = utils.parseUnits("1", "gwei");
       userOp2.paymaster = depositPaymaster.address;
       userOp2.paymasterData = utils.hexZeroPad(maskToken.address, 32);
       const tokenApprovePaymaster = maskToken.interface.encodeFunctionData("approve", [
@@ -264,7 +239,6 @@ describe("Wallet testing", () => {
     });
 
     it("test deploy and send tx in the same tx", async () => {
-      let userOperation: UserOperation = new UserOperation();
       let salt = utils.hexZeroPad("0x0", 32);
       const data = walletLogic.interface.encodeFunctionData("initialize", [
         entryPoint.address,
@@ -277,24 +251,16 @@ describe("Wallet testing", () => {
       const WalletProxyFactory = await ethers.getContractFactory("WalletProxy");
       walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
       let walletAddress = utils.getCreate2Address(singletonFactory.address, salt, utils.keccak256(walletProxyInitCode));
+      let userOperation: UserOperation = createDefaultUserOp(walletAddress);
       await maskToken.transfer(walletAddress, utils.parseEther("55"));
       await depositPaymaster.addDepositFor(walletAddress, utils.parseEther("200"));
       userOperation.sender = walletAddress;
       userOperation.initCode = walletProxyInitCode;
       userOperation.nonce = 0; // should match salt value if deploying through EP
       expect((await ethers.provider.getCode(walletAddress)) == "0x").to.be.true;
-      let gasFee = {
-        Max: BigNumber.from(5e9),
-        MaxPriority: BigNumber.from(5e9),
-      };
-      userOperation.maxFeePerGas = gasFee.Max;
-      userOperation.maxPriorityFeePerGas = gasFee.MaxPriority;
       userOperation.paymaster = depositPaymaster.address;
       userOperation.paymasterData = utils.hexZeroPad(maskToken.address, 32);
-      const transferData = maskToken.interface.encodeFunctionData("transfer", [
-        sponsorAddress,
-        utils.parseUnits("1", "ether"),
-      ]);
+      const transferData = maskToken.interface.encodeFunctionData("transfer", [sponsorAddress, ONE_ETH]);
       userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
         maskToken.address,
         0,
@@ -307,7 +273,7 @@ describe("Wallet testing", () => {
       const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
       console.log(`simulateValidation result:`, result);
       await entryPoint.handleOps([userOperation], beneficialAccountAddress);
-      expect(await maskToken.balanceOf(sponsorAddress)).to.eq(sponsorInitialBal.add(utils.parseUnits("1", "ether")));
+      expect(await maskToken.balanceOf(sponsorAddress)).to.eq(sponsorInitialBal.add(ONE_ETH));
     });
   });
 });
