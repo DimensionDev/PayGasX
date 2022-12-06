@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@dimensiondev/eslint-plugin": "^0.0.2-20220516081411-2649814",
+    "@nomicfoundation/hardhat-chai-matchers": "^1.0.5",
     "@nomiclabs/hardhat-ethers": "^2.0.6",
     "@nomiclabs/hardhat-etherscan": "^3.0.4",
     "@nomiclabs/hardhat-solhint": "^2.0.1",

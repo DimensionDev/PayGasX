@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./BasePaymaster.sol";
 import "./lib/UserOperation.sol";
+import "hardhat/console.sol";
 
 /*
  * clone from https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/samples/DepositPaymaster.sol
@@ -62,19 +63,7 @@ contract DepositPaymaster is BasePaymaster {
         isAdmin[account] = admin;
     }
 
-    /**
-     * withdraw tokens.
-     *
-     * @param target address to send to
-     * @param amount amount to withdraw
-     */
-    function withdraw(address target, uint256 amount) public onlyOwner {
-        uint256 tokenBalance = payToken.balanceOf(msg.sender);
-        if (amount >= tokenBalance) amount = tokenBalance;
-        payToken.transfer(target, amount);
-    }
-
-    function setMaskToEthRatio(uint256[2] calldata ratio) external onlyOwner {
+    function setMaskToMaticRatio(uint256[2] calldata ratio) external onlyOwner {
         require(ratio[0] != 0 && ratio[1] != 0, "DepositPaymaster: invalid ratio");
         PAYTOKEN_TO_MATIC_RATIO = ratio;
     }
@@ -103,10 +92,24 @@ contract DepositPaymaster is BasePaymaster {
         require(userOp.verificationGas > COST_OF_POST, "DepositPaymaster: gas too low for postOp");
 
         require(userOp.paymasterData.length == 32, "DepositPaymaster: paymasterData must specify token");
+        address requiredPayToken = abi.decode(userOp.paymasterData, (address));
+        require(requiredPayToken == address(payToken), "DepositPaymaster: unsupported token");
         address account = userOp.getSender();
         uint256 maxTokenCost = getTokenValueOfMatic(maxCost);
         require(credits[account] >= maxTokenCost, "DepositPaymaster: deposit too low");
         return abi.encode(account, maxTokenCost, maxCost);
+    }
+
+    /**
+     * withdraw tokens.
+     *
+     * @param target address to send to
+     * @param amount amount to withdraw
+     */
+    function withdraw(address target, uint256 amount) public onlyOwner {
+        uint256 tokenBalance = payToken.balanceOf(address(this));
+        if (amount >= tokenBalance) amount = tokenBalance;
+        payToken.transfer(target, amount);
     }
 
     /**
