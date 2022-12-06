@@ -159,6 +159,7 @@ export const signUserOp = (
   return signedMessage1;
 };
 
+//TODO: refactor getContractWalletInfo & getProxyWalletInfo (combine them)
 export const getContractWalletInfo = async (
   simpleWalletCreateSalt: number,
   entryPointAddress: string,
@@ -176,6 +177,23 @@ export const getContractWalletInfo = async (
     paymaster,
     allowance,
   ).data;
+  if (!initCode) throw new Error("node data");
+  const address = create2(walletFactoryAddress, simpleWalletCreateSalt, initCode);
+  return {
+    address,
+    initCode,
+  };
+};
+
+export const getProxyWalletInfo = async (
+  simpleWalletCreateSalt: number,
+  walletLogicAddress: string,
+  initializeData: string,
+  ownerAddress: string,
+  walletFactoryAddress: string,
+): Promise<ContractWalletInfo> => {
+  let contractFactory = await ethers.getContractFactory("WalletProxy");
+  let initCode = contractFactory.getDeployTransaction(ownerAddress, walletLogicAddress, initializeData).data;
   if (!initCode) throw new Error("node data");
   const address = create2(walletFactoryAddress, simpleWalletCreateSalt, initCode);
   return {

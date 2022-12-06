@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
 
 /* solhint-disable reason-string */
@@ -12,11 +12,10 @@ import "./lib/UserOperation.sol";
  * clone from https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/samples/DepositPaymaster.sol
  *
  * A token-based paymaster that accepts token deposit
- * The deposit is only a safeguard: the user pays with his token balance.
+ * The deposit is only a safeguard: it's the credit we give to users.
  * only if the user didn't approve() the paymaster, or if the token balance is not enough, the deposit will be used.
  * thus the required deposit is to cover just one method call.
- * The deposit is locked for the current block: the user must issue unlockTokenDeposit() to be allowed to withdraw
- *  (but can't use the deposit for this or further operations)
+ * Since the deposit is in the form of credit, encashment is not allowed.
  *
  * base on that sample, use one specific ERC20 Token (MaskToken) instead of multi token support
  * remove the IOracle Part to avoid violating the rules of EIP4337
@@ -33,8 +32,13 @@ contract DepositPaymaster is BasePaymaster {
 
     IERC20 public payToken;
 
-    mapping(address => uint256) public balances;
-    mapping(address => uint256) public unlockBlock;
+    mapping(address => uint256) public credits;
+    mapping(address => bool) public isAdmin;
+
+    modifier onlyAdmin() {
+        require(isAdmin[msg.sender] == true, "DepositPaymaster: you are not admin");
+        _;
+    }
 
     /**
      * here, we choose $Mask as the paytoken
@@ -46,19 +50,16 @@ contract DepositPaymaster is BasePaymaster {
     }
 
     /**
-     * deposit for an account
+     * deposit for an account. The deposit is actually the credit we give to users
      * @param account the account to deposit for.
      * @param amount the amount of token to deposit.
      */
-    function addDepositFor(address account, uint256 amount) external onlyOwner {
-        //(sender must have approval for the paymaster)
-        payToken.safeTransferFrom(msg.sender, address(this), amount);
-        balances[account] += amount;
+    function addDepositFor(address account, uint256 amount) external onlyAdmin {
+        credits[account] += amount;
     }
 
-    function depositInfo(address account) public view returns (uint256 amount, uint256 _unlockBlock) {
-        amount = balances[account];
-        _unlockBlock = unlockBlock[account];
+    function adjustAdmin(address account, bool admin) external onlyOwner {
+        isAdmin[account] = admin;
     }
 
     /**
@@ -67,18 +68,10 @@ contract DepositPaymaster is BasePaymaster {
      * @param target address to send to
      * @param amount amount to withdraw
      */
-    function withdrawTokensTo(address target, uint256 amount) public onlyOwner {
-        balances[target] -= amount;
-        payToken.safeTransfer(target, amount);
-    }
-
-    /**
-     * translate the given eth value to token amount
-     * @param ethBought the required eth value we want to "buy"
-     * @return requiredTokens the amount of tokens required to get this amount of eth
-     */
-    function getTokenValueOfEth(uint256 ethBought) internal view virtual returns (uint256 requiredTokens) {
-        return ethBought * PAYTOKEN_TO_ETH_RATIO;
+    function withdraw(address target, uint256 amount) public onlyOwner {
+        uint256 tokenBalance = payToken.balanceOf(msg.sender);
+        if (amount >= tokenBalance) amount = tokenBalance;
+        payToken.transfer(target, amount);
     }
 
     function setMaskToEthRadio(uint256 radio) public onlyOwner {
@@ -88,7 +81,7 @@ contract DepositPaymaster is BasePaymaster {
     /**
      * given the estimate gas cost, base on the UserOperation and specific token to eth ratio
      */
-    function estimateCost(UserOperation calldata userOp) public view returns (uint256 amount) {
+    function estimateCost(UserOperation calldata userOp) external view returns (uint256 amount) {
         return PAYTOKEN_TO_ETH_RATIO * userOp.requiredPreFund();
     }
 
@@ -112,9 +105,17 @@ contract DepositPaymaster is BasePaymaster {
         address account = userOp.getSender();
 
         uint256 maxTokenCost = getTokenValueOfEth(maxCost);
-        require(unlockBlock[account] == 0, "DepositPaymaster: deposit not locked");
-        require(balances[account] >= maxTokenCost, "DepositPaymaster: deposit too low");
+        require(credits[account] >= maxTokenCost, "DepositPaymaster: deposit too low");
         return abi.encode(account, maxTokenCost, maxCost);
+    }
+
+    /**
+     * translate the given eth value to token amount
+     * @param ethBought the required eth value we want to "buy"
+     * @return requiredTokens the amount of tokens required to get this amount of eth
+     */
+    function getTokenValueOfEth(uint256 ethBought) internal view virtual returns (uint256 requiredTokens) {
+        return ethBought * PAYTOKEN_TO_ETH_RATIO;
     }
 
     /**
@@ -138,8 +139,7 @@ contract DepositPaymaster is BasePaymaster {
             payToken.safeTransferFrom(account, address(this), actualTokenCost);
         } else {
             //in case above transferFrom failed, pay with deposit:
-            balances[account] -= actualTokenCost;
+            credits[account] -= actualTokenCost;
         }
-        balances[owner()] += actualTokenCost;
     }
 }

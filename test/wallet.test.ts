@@ -190,6 +190,7 @@ describe("Wallet testing", () => {
       depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
       await depositPaymaster.addStake(0, { value: utils.parseEther("2") });
       await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
+      await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
       await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
       let verifyingPaymaster = await new VerifyingPaymaster__factory(deployer).deploy(
@@ -278,6 +279,7 @@ describe("Wallet testing", () => {
       walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
       let walletAddress = utils.getCreate2Address(singletonFactory.address, salt, utils.keccak256(walletProxyInitCode));
       await maskToken.transfer(walletAddress, utils.parseEther("55"));
+      await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletAddress, utils.parseEther("200"));
       userOperation.sender = walletAddress;
       userOperation.initCode = walletProxyInitCode;
