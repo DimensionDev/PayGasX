@@ -10,11 +10,11 @@ import "./interfaces/IDepositPaymaster.sol";
 contract PresetFactory {
     using SafeERC20 for IERC20;
 
-    uint96 public constant maskToGive = 6;
+    uint96 public immutable maskToGive;
     address public paymaster;
     address public admin;
     //initial credit for a user is 5 $MASK
-    uint96 public constant initialCredit = 6 ether;
+    uint96 public immutable initialCredit;
     IERC20 public maskToken;
 
     mapping(address => bool) public isSetUp;
@@ -27,11 +27,15 @@ contract PresetFactory {
     constructor(
         address _paymaster,
         address _admin,
-        IERC20 _mask
+        IERC20 _mask,
+        uint96 _maskToGive,
+        uint96 _initialCredit
     ) {
         paymaster = _paymaster;
         admin = _admin;
         maskToken = _mask;
+        maskToGive = _maskToGive;
+        initialCredit = _initialCredit;
     }
 
     function setUpForAccount(address account) external onlyAdmin {

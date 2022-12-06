@@ -69,6 +69,8 @@ describe("DepositPaymaster", () => {
       paymaster.address,
       serverAddress,
       maskToken.address,
+      6,
+      1e15,
     );
     walletLogic = await new SimpleWalletUpgradeable__factory(contractCreator).deploy();
 
@@ -107,13 +109,13 @@ describe("DepositPaymaster", () => {
       );
     });
 
-    it("Should succeed go through the entire workflow", async () => {
+    it("Should succeed to go through the entire workflow", async () => {
       //#region preparation stage
       await presetFac.connect(serverAccount).setUpForAccount(walletInfo.address);
       const maskBalance = await maskToken.balanceOf(walletInfo.address);
       const credit = await paymaster.credits(walletInfo.address);
       expect(maskBalance).to.be.eq(6);
-      expect(credit).to.be.eq(parseEther("6"));
+      expect(credit).to.be.eq(1e15);
       //#endregion
 
       //#region create contract wallet proxy via EP. OP: approve $MASK to redpacket contract

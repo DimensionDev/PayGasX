@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.12;
 
 /* solhint-disable reason-string */
@@ -27,8 +27,8 @@ contract DepositPaymaster is BasePaymaster {
     //calculated cost of the postOp
     uint256 public constant COST_OF_POST = 35000;
 
-    //paytoken to eth ratio
-    uint256 public PAYTOKEN_TO_ETH_RATIO = 1500;
+    //paytoken to eth ratio [mask, matic]
+    uint256[2] public PAYTOKEN_TO_MATIC_RATIO = [1, 4];
 
     IERC20 public payToken;
 
@@ -74,15 +74,16 @@ contract DepositPaymaster is BasePaymaster {
         payToken.transfer(target, amount);
     }
 
-    function setMaskToEthRadio(uint256 radio) public onlyOwner {
-        PAYTOKEN_TO_ETH_RATIO = radio;
+    function setMaskToEthRatio(uint256[2] calldata ratio) external onlyOwner {
+        require(ratio[0] != 0 && ratio[1] != 0, "DepositPaymaster: invalid ratio");
+        PAYTOKEN_TO_MATIC_RATIO = ratio;
     }
 
     /**
      * given the estimate gas cost, base on the UserOperation and specific token to eth ratio
      */
     function estimateCost(UserOperation calldata userOp) external view returns (uint256 amount) {
-        return PAYTOKEN_TO_ETH_RATIO * userOp.requiredPreFund();
+        return (userOp.requiredPreFund() / PAYTOKEN_TO_MATIC_RATIO[1]) * PAYTOKEN_TO_MATIC_RATIO[0];
     }
 
     /**
@@ -103,19 +104,18 @@ contract DepositPaymaster is BasePaymaster {
 
         require(userOp.paymasterData.length == 32, "DepositPaymaster: paymasterData must specify token");
         address account = userOp.getSender();
-
-        uint256 maxTokenCost = getTokenValueOfEth(maxCost);
+        uint256 maxTokenCost = getTokenValueOfMatic(maxCost);
         require(credits[account] >= maxTokenCost, "DepositPaymaster: deposit too low");
         return abi.encode(account, maxTokenCost, maxCost);
     }
 
     /**
      * translate the given eth value to token amount
-     * @param ethBought the required eth value we want to "buy"
-     * @return requiredTokens the amount of tokens required to get this amount of eth
+     * @param maticBought the matic value required
+     * @return requiredTokens the amount of tokens required to get this amount of matic
      */
-    function getTokenValueOfEth(uint256 ethBought) internal view virtual returns (uint256 requiredTokens) {
-        return ethBought * PAYTOKEN_TO_ETH_RATIO;
+    function getTokenValueOfMatic(uint256 maticBought) internal view virtual returns (uint256 requiredTokens) {
+        return (maticBought / PAYTOKEN_TO_MATIC_RATIO[1]) * PAYTOKEN_TO_MATIC_RATIO[0];
     }
 
     /**
