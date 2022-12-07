@@ -18,6 +18,7 @@ import {
   SingletonFactory__factory,
 } from "../types";
 
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { Signer, Wallet } from "ethers";
 import { hexZeroPad, Interface, parseEther } from "ethers/lib/utils";
@@ -25,7 +26,6 @@ import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable
 import { AddressZero, MaxUint256, paymasterStake, unstakeDelaySec } from "./constants";
 import { revertToSnapShot, takeSnapshot } from "./helper";
 import { ContractWalletInfo, createDefaultUserOp, createWallet, getProxyWalletInfo, signUserOp } from "./utils";
-const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const hardhatProvider = ethers.provider;
 
 describe("DepositPaymaster", () => {
@@ -276,10 +276,9 @@ describe("DepositPaymaster", () => {
       const chainId = (await hardhatProvider.getNetwork()).chainId;
       userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
       //TODO: fix customError handle with hardhat chai matcher
-      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress)).to.be.revertedWithCustomError(
-        entryPoint,
-        "FailedOp",
-      );
+      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress))
+        .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+        .withArgs(anyValue, anyValue, "DepositPaymaster: deposit too low");
       //#endregion
     });
 
@@ -300,14 +299,13 @@ describe("DepositPaymaster", () => {
         tokenApproveData,
       ]);
       await userOp.estimateGas(hardhatProvider, entryPoint.address);
-      userOp.verificationGas = 1000;
+      userOp.verificationGas = 10000;
       const chainId = (await hardhatProvider.getNetwork()).chainId;
       userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
       //TODO: fix customError handle with hardhat chai matcher
-      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress)).to.be.revertedWithCustomError(
-        entryPoint,
-        "FailedOp",
-      );
+      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress))
+        .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+        .withArgs(anyValue, anyValue, "DepositPaymaster: gas too low for postOp");
       //#endregion
     });
 
@@ -331,10 +329,9 @@ describe("DepositPaymaster", () => {
       const chainId = (await hardhatProvider.getNetwork()).chainId;
       userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
       //TODO: fix customError handle with hardhat chai matcher with reverted reason
-      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress)).to.be.revertedWithCustomError(
-        entryPoint,
-        "FailedOp",
-      );
+      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress))
+        .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+        .withArgs(anyValue, anyValue, "DepositPaymaster: paymasterData must specify token");
       //#endregion
     });
 
@@ -358,10 +355,9 @@ describe("DepositPaymaster", () => {
       const chainId = (await hardhatProvider.getNetwork()).chainId;
       userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
       //TODO: fix customError handle with hardhat chai matcher with reverted reason
-      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress)).to.be.revertedWithCustomError(
-        entryPoint,
-        "FailedOp",
-      );
+      await expect(entryPoint.connect(sponsor).handleOps([userOp], beneficiaryAddress))
+        .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+        .withArgs(anyValue, anyValue, "DepositPaymaster: unsupported token");
       //#endregion
     });
   });
