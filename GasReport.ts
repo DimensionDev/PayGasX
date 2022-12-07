@@ -4,7 +4,6 @@ import fs from "fs/promises";
 import { ethers, network } from "hardhat";
 import path from "path";
 import { format } from "prettier";
-import { UserOperation } from "./Objects/userOperation";
 import {
   AddressZero,
   creationParams,
@@ -16,6 +15,7 @@ import {
   TWO_ETH,
   unstakeDelaySec,
 } from "./test/constants";
+import { UserOperation } from "./test/entity/userOperation";
 import { createWallet, deployWallet, signUserOp } from "./test/utils";
 import {
   DepositPaymaster,
@@ -247,7 +247,13 @@ async function setUp() {
   await entryPoint.depositTo(paymaster.address, { value: parseEther("1") });
   await maskToken.connect(ethersSigner).approve(paymaster.address, ethers.constants.MaxUint256);
 
-  contractWallet = await deployWallet(entryPoint.address, walletOwner.address);
+  contractWallet = await deployWallet(
+    entryPoint.address,
+    walletOwner.address,
+    maskToken.address,
+    paymaster.address,
+    parseEther("1"),
+  );
 
   await paymaster.addDepositFor(contractWallet.address, FIVE_ETH);
 
