@@ -23,6 +23,7 @@ We implemented `UserOperation` as an object, you could check [`userOperation.ts`
 
 - The fields `paymaster` and `paymasterData` were combined into one field `paymasterAndData` in [recent commit](https://github.com/ethereum/EIPs/commit/9b8132cfb3243fca785d8c42bc188a72cc84a511). We may consider update it accordingly.
 
+
 ## How to Get the Fields in User Operation?
 
 ### callData
