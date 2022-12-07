@@ -1,3 +1,4 @@
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { use } from "chai";
 import chaiAsPromised from "chai-as-promised";
 import { Signer, utils, Wallet } from "ethers";
@@ -163,9 +164,9 @@ describe("EntryPoint with Verifying Paymaster", () => {
 
     userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
 
-    await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
-      "VerifyingPaymaster: operation not in sponsored operation",
-    );
+    await expect(entryPointStatic.callStatic.simulateValidation(userOp))
+      .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+      .withArgs(anyValue, anyValue, "VerifyingPaymaster: operation not in sponsored operation");
   });
 
   it("Should directly transfer $ETH through paymaster fail", async () => {
@@ -200,8 +201,8 @@ describe("EntryPoint with Verifying Paymaster", () => {
     userOp.paymasterData = signPaymasterHash(paymasterSignHash, offChainSigner.privateKey);
 
     userOp.signature = signUserOp(userOp, entryPoint.address, chainId, walletOwner.privateKey);
-    await expect(entryPointStatic.callStatic.simulateValidation(userOp)).to.be.revertedWith(
-      "VerifyingPaymaster: operation not in sponsored operation",
-    );
+    await expect(entryPointStatic.callStatic.simulateValidation(userOp))
+      .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+      .withArgs(anyValue, anyValue, "VerifyingPaymaster: operation not in sponsored operation");
   });
 });

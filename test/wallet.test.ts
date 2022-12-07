@@ -149,7 +149,6 @@ describe("Wallet testing", () => {
     userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
     let sponsorInitialBal = await ethers.provider.getBalance(sponsorAddress);
     const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
-    console.log(`simulateValidation result:`, result);
     await entryPoint.handleOps([userOperation], beneficialAccountAddress);
     expect(await ethers.provider.getBalance(sponsorAddress)).to.eq(
       sponsorInitialBal.add(utils.parseUnits("0.1", "ether")),
@@ -190,6 +189,7 @@ describe("Wallet testing", () => {
       depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
       await depositPaymaster.addStake(0, { value: utils.parseEther("2") });
       await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
+      await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletProxyAddress, utils.parseEther("2"));
       await entryPoint.depositTo(depositPaymaster.address, { value: utils.parseEther("1") });
       let verifyingPaymaster = await new VerifyingPaymaster__factory(deployer).deploy(
@@ -246,9 +246,7 @@ describe("Wallet testing", () => {
       userOp2.signature = signUserOp(userOp2, entryPoint.address, chainId, userPrivateKey);
 
       let result = await entryPointStatic.callStatic.simulateValidation(userOp1);
-      console.log(result);
       result = await entryPointStatic.callStatic.simulateValidation(userOp2);
-      console.log(result);
       // when putting two userOpt in one tx, we have to calculate the nonce manually, and re-sign the userOpt
       userOp2.nonce = userOp1.nonce.add(1);
       userOp2.signature = signUserOp(userOp2, entryPoint.address, chainId, userPrivateKey);
@@ -278,6 +276,7 @@ describe("Wallet testing", () => {
       walletProxyInitCode = WalletProxyFactory.getDeployTransaction(userAddress, simpleWallet.address, data).data!;
       let walletAddress = utils.getCreate2Address(singletonFactory.address, salt, utils.keccak256(walletProxyInitCode));
       await maskToken.transfer(walletAddress, utils.parseEther("55"));
+      await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletAddress, utils.parseEther("200"));
       userOperation.sender = walletAddress;
       userOperation.initCode = walletProxyInitCode;
@@ -305,7 +304,6 @@ describe("Wallet testing", () => {
       userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
       let sponsorInitialBal = await maskToken.balanceOf(sponsorAddress);
       const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
-      console.log(`simulateValidation result:`, result);
       await entryPoint.handleOps([userOperation], beneficialAccountAddress);
       expect(await maskToken.balanceOf(sponsorAddress)).to.eq(sponsorInitialBal.add(utils.parseUnits("1", "ether")));
     });
