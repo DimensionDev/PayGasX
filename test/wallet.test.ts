@@ -1,5 +1,5 @@
-import { use } from "chai";
-import chaiAsPromised from "chai-as-promised";
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+import { expect } from "chai";
 import { BigNumber, constants, Signer, utils, Wallet } from "ethers";
 import { ethers, network } from "hardhat";
 import {
@@ -22,8 +22,6 @@ import { AddressZero, ONE_ETH, TWO_ETH } from "./constants";
 import { UserOperation } from "./entity/userOperation";
 import { revertToSnapShot, takeSnapshot } from "./helper";
 import { createDefaultUserOp, getPaymasterSignHash, signPaymasterHash, signUserOp } from "./utils";
-
-const { expect } = use(chaiAsPromised);
 
 describe("Wallet testing", () => {
   let deployer: Signer;
@@ -139,55 +137,6 @@ describe("Wallet testing", () => {
     expect(await testNft.ownerOf(0)).eq(walletProxyAddress);
   });
 
-  it("test bad cases without paymaster", async () => {
-    //transfer ether from simpleWallet for test
-    await deployer.sendTransaction({
-      from: deployerAddress,
-      to: walletProxyAddress,
-      value: TWO_ETH,
-    });
-    let userOperation: UserOperation = createDefaultUserOp(walletProxyAddress);
-    await walletLogic.addDeposit({ value: ONE_ETH });
-    expect(await walletLogic.getDeposit()).to.eql(ONE_ETH);
-    userOperation.nonce = 50;
-    userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-    await expect(entryPointStatic.callStatic.simulateValidation(userOperation)).to.be.reverted; // no gas
-
-    await userOperation.estimateGas(ethers.provider, entryPoint.address);
-    userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
-      sponsorAddress,
-      utils.parseUnits("0.1", "ether"),
-      "0x",
-    ]);
-    userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-    await expect(entryPointStatic.callStatic.simulateValidation(userOperation)).to.be.revertedWith(
-      "wallet: invalid nonce",
-    );
-
-    userOperation.nonce = await walletLogic.nonce();
-    let tempKey = Wallet.createRandom().privateKey;
-    userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, tempKey);
-    await expect(entryPointStatic.callStatic.simulateValidation(userOperation)).to.be.revertedWith(
-      "wallet: wrong signature",
-    );
-
-    userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-    await entryPointStatic.callStatic.simulateValidation(userOperation);
-    try {
-      const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
-      if (result) {
-        let sponsorInitialBal = await ethers.provider.getBalance(sponsorAddress);
-        await entryPoint.handleOps([userOperation], beneficialAccountAddress);
-        expect(await ethers.provider.getBalance(sponsorAddress)).to.eq(
-          sponsorInitialBal.add(utils.parseUnits("0.1", "ether")),
-        );
-      }
-    } catch (error) {
-      console.error(error);
-      throw new Error("Simulation error");
-    }
-  });
-
   it("test upgradeability", async () => {
     let testSimpleWallet = await new SimpleWalletUpgradeable__factory(deployer).deploy();
     let testProxy = await new WalletProxy__factory(deployer).deploy(
@@ -205,6 +154,68 @@ describe("Wallet testing", () => {
       testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
     ).to.be.revertedWith("only owner");
     await testProxy.upgradeToAndCall(testSimpleWallet.address, "0x", false);
+  });
+
+  describe("test bad cases without paymaster", async () => {
+    let userOperation: UserOperation;
+
+    before(async () => {
+      //transfer ether from simpleWallet for test
+      await deployer.sendTransaction({
+        from: deployerAddress,
+        to: walletProxyAddress,
+        value: TWO_ETH,
+      });
+      userOperation = createDefaultUserOp(walletProxyAddress);
+      await walletLogic.addDeposit({ value: ONE_ETH });
+      expect(await walletLogic.getDeposit()).to.eql(ONE_ETH);
+    });
+
+    it("fail due to no gas", async () => {
+      userOperation.nonce = 50;
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+      await expect(entryPointStatic.callStatic.simulateValidation(userOperation)).to.be.reverted;
+    });
+
+    it("fail due to invalid nonce", async () => {
+      await userOperation.estimateGas(ethers.provider, entryPoint.address);
+      userOperation.callData = walletLogic.interface.encodeFunctionData("execFromEntryPoint", [
+        sponsorAddress,
+        utils.parseUnits("0.1", "ether"),
+        "0x",
+      ]);
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+      await expect(entryPointStatic.callStatic.simulateValidation(userOperation))
+        .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+        .withArgs(anyValue, anyValue, "wallet: invalid nonce");
+    });
+
+    it("fail due to wrong signature", async () => {
+      userOperation.nonce = await walletLogic.nonce();
+      let randomKey = Wallet.createRandom().privateKey;
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, randomKey);
+      await expect(entryPointStatic.callStatic.simulateValidation(userOperation))
+        .to.be.revertedWithCustomError(entryPoint, "FailedOp")
+        .withArgs(anyValue, anyValue, "wallet: wrong signature");
+    });
+
+    it("normal workflow", async () => {
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+      await entryPointStatic.callStatic.simulateValidation(userOperation);
+      try {
+        const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
+        if (result) {
+          let sponsorInitialBal = await ethers.provider.getBalance(sponsorAddress);
+          await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+          expect(await ethers.provider.getBalance(sponsorAddress)).to.eq(
+            sponsorInitialBal.add(utils.parseUnits("0.1", "ether")),
+          );
+        }
+      } catch (error) {
+        console.error(error);
+        throw new Error("Simulation error");
+      }
+    });
   });
 
   describe("test paymaster", async () => {
@@ -229,7 +240,7 @@ describe("Wallet testing", () => {
       await verifyingPaymaster.addStake(0, { value: ONE_ETH });
     });
 
-    it("test normal workflow", async () => {
+    it("normal workflow", async () => {
       let userOp1 = createDefaultUserOp(walletProxyAddress);
       userOp1.paymaster = verifyingPaymaster.address;
       userOp1.initCode = "0x";
@@ -269,8 +280,6 @@ describe("Wallet testing", () => {
         if (result) {
           result = await entryPointStatic.callStatic.simulateValidation(userOp2);
           if (result) {
-            // FIXME:
-            // when putting two userOpt in one tx, we have to calculate the nonce manually, and re-sign the userOpt
             userOp2.nonce = userOp1.nonce.add(1);
             userOp2.signature = signUserOp(userOp2, entryPoint.address, chainId, userPrivateKey);
             await entryPoint.handleOps([userOp1, userOp2], beneficialAccountAddress);
@@ -304,9 +313,7 @@ describe("Wallet testing", () => {
       expect((await ethers.provider.getCode(walletAddress)) == "0x").to.be.true;
       let userOperation: UserOperation = createDefaultUserOp(walletAddress);
       await maskToken.transfer(walletAddress, utils.parseEther("55"));
-      await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletAddress, utils.parseEther("200"));
-      // userOperation.initCode = "0x";
       userOperation.nonce = 0; // should match salt value if deploying through EP
       userOperation.paymaster = depositPaymaster.address;
       userOperation.paymasterData = utils.hexZeroPad(maskToken.address, 32);
