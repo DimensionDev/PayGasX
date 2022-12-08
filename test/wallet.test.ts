@@ -216,6 +216,7 @@ describe("Wallet testing", () => {
       depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
       await depositPaymaster.addStake(0, { value: TWO_ETH });
       await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
+      await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletProxyAddress, TWO_ETH);
       await entryPoint.depositTo(depositPaymaster.address, { value: ONE_ETH });
       verifyingPaymaster = await new VerifyingPaymaster__factory(deployer).deploy(
@@ -303,6 +304,7 @@ describe("Wallet testing", () => {
       expect((await ethers.provider.getCode(walletAddress)) == "0x").to.be.true;
       let userOperation: UserOperation = createDefaultUserOp(walletAddress);
       await maskToken.transfer(walletAddress, utils.parseEther("55"));
+      await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletAddress, utils.parseEther("200"));
       // userOperation.initCode = "0x";
       userOperation.nonce = 0; // should match salt value if deploying through EP

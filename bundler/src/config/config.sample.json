@@ -1,0 +1,15 @@
+{
+  "chain": {
+    "id": "80001",
+    "rpc_server": "https://rpc-mumbai.matic.today",
+    "secret_key": "00000000000000000000000000000000",
+    "entrypoint_contract_address": "0x0000000000000000000000000000000000000000"
+  },
+  "test": {
+    "__comment__": "This field can be omitted in production env",
+    "user_secret": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "contract_wallet_address": "0x0000000000000000000000000000000000000000",
+    "erc20_contract_address": "0x0000000000000000000000000000000000000000",
+    "paymaster_address": "0x0000000000000000000000000000000000000000"
+  }
+}
