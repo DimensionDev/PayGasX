@@ -14,6 +14,7 @@ type DeployedAddressRow = {
   DepositPaymaster: string;
   VerifyingPaymaster: string;
   WalletLogic: string;
+  PresetFactory: string;
 };
 
 async function main() {
@@ -31,15 +32,24 @@ async function main() {
 main();
 
 function* makeTable(rows: DeployedAddressRow[]) {
-  yield "| Chain | MaskToken | EntryPoint | DepositPaymaster | VerifyingPaymaster | WalletLogic |";
-  yield "| - | - | - | - | - | - |";
-  for (const { Chain, MaskToken, EntryPoint, DepositPaymaster, VerifyingPaymaster, WalletLogic } of rows) {
+  yield "| Chain | MaskToken | EntryPoint | DepositPaymaster | VerifyingPaymaster | WalletLogic | PresetFactory |";
+  yield "| - | - | - | - | - | - | - |";
+  for (const {
+    Chain,
+    MaskToken,
+    EntryPoint,
+    DepositPaymaster,
+    VerifyingPaymaster,
+    WalletLogic,
+    PresetFactory,
+  } of rows) {
     const mtElement = formElement(MaskToken, `mt-${Chain}`);
     const epElement = formElement(EntryPoint, `ep-${Chain}`);
     const dpmElement = formElement(DepositPaymaster, `dpm-${Chain}`);
     const vpmElement = formElement(VerifyingPaymaster, `vpm-${Chain}`);
     const wtElement = formElement(WalletLogic, `wl-${Chain}`);
-    yield `| ${Chain} | ${mtElement} | ${epElement} | ${dpmElement} | ${vpmElement} | ${wtElement} |`;
+    const pfElement = formElement(PresetFactory, `pf-${Chain}`);
+    yield `| ${Chain} | ${mtElement} | ${epElement} | ${dpmElement} | ${vpmElement} | ${wtElement} | ${pfElement} |`;
   }
   yield "";
   yield* rows.map(({ Chain, MaskToken }) => formLink(MaskToken, Chain, "mt"));
@@ -47,11 +57,20 @@ function* makeTable(rows: DeployedAddressRow[]) {
   yield* rows.map(({ Chain, DepositPaymaster }) => formLink(DepositPaymaster, Chain, "dpm"));
   yield* rows.map(({ Chain, VerifyingPaymaster }) => formLink(VerifyingPaymaster, Chain, "vpm"));
   yield* rows.map(({ Chain, WalletLogic }) => formLink(WalletLogic, Chain, "wl"));
+  yield* rows.map(({ Chain, PresetFactory }) => formLink(PresetFactory, Chain, "pf"));
 }
 
 async function loadDeployedAddressRows(): Promise<DeployedAddressRow[]> {
   const data = await fs.readFile(ADDRESS_TABLE_PATH, "utf-8");
-  const columns = ["Chain", "MaskToken", "EntryPoint", "DepositPaymaster", "VerifyingPaymaster", "WalletLogic"];
+  const columns = [
+    "Chain",
+    "MaskToken",
+    "EntryPoint",
+    "DepositPaymaster",
+    "VerifyingPaymaster",
+    "WalletLogic",
+    "PresetFactory",
+  ];
   return parse(data, { delimiter: ",", columns, from: 2 });
 }
 

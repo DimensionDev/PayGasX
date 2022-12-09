@@ -1,5 +1,6 @@
 import { ethers } from "hardhat";
-import { Create2Factory } from "../test/utils/const";
+
+const Create2Factory = "0xce0042b868300000d44a59004da54a005ffdcf9f";
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -42,6 +43,27 @@ async function main() {
 
     depositPaymasterAddress = depositPaymaster.address;
   }
+
+  //deploy presetFactory
+  let presetFactoryAddress;
+  if (!presetFactoryAddress) {
+    const PresetFactoryFactory = await ethers.getContractFactory("PresetFactory");
+    const presetFactory = await PresetFactoryFactory.deploy(
+      depositPaymasterAddress,
+      deployer.address,
+      maskTokenAddress,
+      ethers.utils.parseEther("5"),
+      ethers.utils.parseEther("5"),
+    );
+    await presetFactory.deployed();
+    console.log("presetFactory address:", presetFactory.address);
+
+    presetFactoryAddress = presetFactory.address;
+  }
+
+  // give admin permission to deposit paymaster
+  const depositPaymaster = await (await ethers.getContractFactory("DepositPaymaster")).attach(depositPaymasterAddress);
+  await depositPaymaster.connect(deployer).adjustAdmin(presetFactoryAddress, true);
 
   // deploy verify paymaster
   let verifyPaymasterAddress;
