@@ -46,14 +46,14 @@ You could run the following command to generate gas report automatically.
 
 | Chain        | MaskToken                       | EntryPoint                      | DepositPaymaster                 | VerifyingPaymaster               | WalletLogic                     | PresetFactory                   |
 | ------------ | ------------------------------- | ------------------------------- | -------------------------------- | -------------------------------- | ------------------------------- | ------------------------------- |
-| matic_mumbai | [`0xF8935Df6`][mt-matic_mumbai] | [`0x8A42F700`][ep-matic_mumbai] | [`0x808c7f48`][dpm-matic_mumbai] | [`0xB349AC5E`][vpm-matic_mumbai] | [`0xd57E8156`][wl-matic_mumbai] | [`0x51586e22`][pf-matic_mumbai] |
+| matic_mumbai | [`0xF8935Df6`][mt-matic_mumbai] | [`0x8A42F700`][ep-matic_mumbai] | [`0x808c7f48`][dpm-matic_mumbai] | [`0xB349AC5E`][vpm-matic_mumbai] | [`0xd57E8156`][wl-matic_mumbai] | [`0x72C51052`][pf-matic_mumbai] |
 
 [mt-matic_mumbai]: https://mumbai.polygonscan.com/address/0xF8935Df67cAB7BfcA9532D1Ac2088C5c39b995b5
 [ep-matic_mumbai]: https://mumbai.polygonscan.com/address/0x8A42F70047a99298822dD1dbA34b454fc49913F2
 [dpm-matic_mumbai]: https://mumbai.polygonscan.com/address/0x808c7f48a64404e4e97d9b62b21f13F984fF1a96
 [vpm-matic_mumbai]: https://mumbai.polygonscan.com/address/0xB349AC5E5C037C2ecb2AE9fCDc8F122b5f384620
 [wl-matic_mumbai]: https://mumbai.polygonscan.com/address/0xd57E81560615E55f4Cd1A35d5676b25EC1b27359
-[pf-matic_mumbai]: https://mumbai.polygonscan.com/address/0x51586e22a9dC756D488f3c9C388054ED7220f02d
+[pf-matic_mumbai]: https://mumbai.polygonscan.com/address/0x72C510523797653d286fD268e06226C5a1F1051b
 
 <!-- end PayGasX -->
 
