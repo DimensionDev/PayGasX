@@ -20,7 +20,7 @@ import {
 
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
-import { Signer, Wallet } from "ethers";
+import { BigNumberish, Signer, Wallet } from "ethers";
 import { hexZeroPad, Interface, parseEther } from "ethers/lib/utils";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
 import { AddressZero, MaxUint256, paymasterStake, unstakeDelaySec } from "./constants";
@@ -160,10 +160,21 @@ describe("DepositPaymaster", () => {
       expect(paymasterMaskBalanceAfter).to.be.eq(0);
       expect(serverMaskBalanceAfter.sub(serverMaskBalanceBefore)).to.be.eq(paymasterMaskBalanceBefore);
       //#endregion
+
+      //#region withdraw token from preset factory
+      const presetFacBalanceBefore = await maskToken.balanceOf(presetFac.address);
+      expect(presetFacBalanceBefore).to.be.eq(parseEther("1000").sub(parseEther("6")));
+      const serverAccBalanceBefore = await maskToken.balanceOf(serverAddress);
+      await presetFac.connect(serverAccount).withdrawToken(serverAddress);
+      const presetFacBalanceAfter = await maskToken.balanceOf(presetFac.address);
+      const serverAccBalanceAfter = await maskToken.balanceOf(serverAddress);
+      expect(serverAccBalanceAfter.sub(serverAccBalanceBefore)).to.be.eq(presetFacBalanceBefore);
+      expect(presetFacBalanceAfter).to.be.eq(0);
+      //#endregion
     });
   });
 
-  describe("Util func check", () => {
+  describe("Util func in paymaster check", () => {
     let walletInfo: ContractWalletInfo;
     before(async () => {
       walletOwner = createWallet();
@@ -217,6 +228,13 @@ describe("DepositPaymaster", () => {
       );
     });
 
+    it("Should set mask to matic func succeed when everything is right", async () => {
+      const newRatio: [BigNumberish, BigNumberish] = [1, 5];
+      await paymaster.connect(contractCreator).setMaskToMaticRatio(newRatio);
+      const ratio = [await paymaster.PAYTOKEN_TO_MATIC_RATIO(0), await paymaster.PAYTOKEN_TO_MATIC_RATIO(1)];
+      expect(ratio.every((v, index) => v.eq(newRatio[index])));
+    });
+
     it("Should fail to set Mask to Matic ratio with invalid param", async () => {
       await expect(paymaster.connect(contractCreator).setMaskToMaticRatio([1, 0])).to.be.revertedWith(
         "DepositPaymaster: invalid ratio",
@@ -253,7 +271,7 @@ describe("DepositPaymaster", () => {
       );
     });
 
-    it("Should be meet simulation error when there is no deposit", async () => {
+    it("Should meet simulation error when there is no deposit", async () => {
       const maskBalance = await maskToken.balanceOf(walletInfo.address);
       const credit = await paymaster.credits(walletInfo.address);
       expect(maskBalance).to.be.eq(0);
@@ -282,7 +300,7 @@ describe("DepositPaymaster", () => {
       //#endregion
     });
 
-    it("Should be meet error when verificationGas is too low", async () => {
+    it("Should meet error when verificationGas is too low", async () => {
       await presetFac.connect(serverAccount).setUpForAccount(walletInfo.address);
 
       //#region create contract wallet proxy via EP. OP: approve $MASK to redpacket contract
@@ -309,7 +327,7 @@ describe("DepositPaymaster", () => {
       //#endregion
     });
 
-    it("Should be meet error when paymasterData is invalid", async () => {
+    it("Should meet error when paymasterData is invalid", async () => {
       await presetFac.connect(serverAccount).setUpForAccount(walletInfo.address);
 
       //#region create contract wallet proxy via EP. OP: approve $MASK to redpacket contract
@@ -335,7 +353,7 @@ describe("DepositPaymaster", () => {
       //#endregion
     });
 
-    it("Should be meet error when the specified token address in paymasterData is not supported", async () => {
+    it("Should meet error when the specified token address in paymasterData is not supported", async () => {
       await presetFac.connect(serverAccount).setUpForAccount(walletInfo.address);
 
       //#region create contract wallet proxy via EP. OP: approve $MASK to redpacket contract
@@ -399,6 +417,7 @@ describe("DepositPaymaster", () => {
       userOp.initCode = walletInfo.initCode;
       userOp.paymaster = paymaster.address;
       userOp.paymasterData = hexZeroPad(maskToken.address, 32);
+      //transfer all mask away in the userOperation
       const tokenApproveData = maskToken.interface.encodeFunctionData("transfer", [redPacket.address, parseEther("6")]);
       userOp.callData = walletInterface.encodeFunctionData("execFromEntryPoint", [
         maskToken.address,
@@ -424,6 +443,52 @@ describe("DepositPaymaster", () => {
         throw new Error("Simulation error");
       }
       //#endregion
+    });
+  });
+
+  describe("Exception case in workflow", () => {
+    let walletInfo: ContractWalletInfo;
+    before(async () => {
+      walletOwner = createWallet();
+      let simpleWalletCreateSalt = 0;
+      const initializeData = walletLogic.interface.encodeFunctionData("initialize", [
+        entryPoint.address,
+        walletOwner.address,
+        maskToken.address,
+        paymaster.address,
+        MaxUint256,
+      ]);
+      walletInfo = await getProxyWalletInfo(
+        simpleWalletCreateSalt,
+        walletLogic.address,
+        initializeData,
+        walletOwner.address,
+        walletFactory.address,
+      );
+    });
+
+    it("Should fail if account ask for preset for the second time", async () => {
+      await presetFac.connect(serverAccount).setUpForAccount(walletInfo.address);
+      const maskBalance = await maskToken.balanceOf(walletInfo.address);
+      const credit = await paymaster.credits(walletInfo.address);
+      expect(maskBalance).to.be.eq(parseEther("6"));
+      expect(credit).to.be.eq(2e15);
+
+      await expect(presetFac.connect(serverAccount).setUpForAccount(walletInfo.address)).to.be.revertedWith(
+        "PresetFactory: This account is already set up",
+      );
+    });
+
+    it("Should fail if unauthorized account is calling setUpForAccount", async () => {
+      await expect(presetFac.connect(sponsor).setUpForAccount(walletInfo.address)).to.be.revertedWith(
+        "PresetFactory: you are not admin",
+      );
+    });
+
+    it("Should fail if unauthorized account calls withdrawToken", async () => {
+      await expect(presetFac.connect(sponsor).withdrawToken(walletInfo.address)).to.be.revertedWith(
+        "PresetFactory: you are not admin",
+      );
     });
   });
 });
