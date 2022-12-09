@@ -24,6 +24,7 @@ nomicfoundation
 nomiclabs
 Numberish
 paygasx
+PAYTOKEN
 prefund
 prettierignore
 reentrancy

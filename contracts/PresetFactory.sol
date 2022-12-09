@@ -24,13 +24,7 @@ contract PresetFactory {
         _;
     }
 
-    constructor(
-        address _paymaster,
-        address _admin,
-        IERC20 _mask,
-        uint96 _maskToGive,
-        uint96 _initialCredit
-    ) {
+    constructor(address _paymaster, address _admin, IERC20 _mask, uint96 _maskToGive, uint96 _initialCredit) {
         paymaster = _paymaster;
         admin = _admin;
         maskToken = _mask;
@@ -39,8 +33,14 @@ contract PresetFactory {
     }
 
     function setUpForAccount(address account) external onlyAdmin {
+        require(isSetUp[account] == false, "PresetFactory: This account is already set up");
         isSetUp[account] = true;
         IERC20(maskToken).safeTransfer(account, maskToGive);
         IDepositPaymaster(paymaster).addDepositFor(account, initialCredit);
+    }
+
+    function withdrawToken(address recipient) external onlyAdmin {
+        uint256 tokenBalance = maskToken.balanceOf(address(this));
+        maskToken.transfer(recipient, tokenBalance);
     }
 }
