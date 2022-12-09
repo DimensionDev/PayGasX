@@ -131,6 +131,7 @@ func Healthz(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 }
 
 func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	ctx := context.Background()
 	req := HandleOpsRequest{}
 	err := json.Unmarshal([]byte(request.Body), &req)
 	if err != nil {
@@ -149,8 +150,14 @@ func HandleOps(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRes
 		}
 		abiUOs = append(abiUOs, abiUO)
 	}
+	for index, op := range abiUOs {
+		err := eth.Simulate(ctx, op)
+		if err != nil {
+			return errorResp(400, fmt.Sprintf("failed to simulate user operation #%d: %s", index, err.Error()))
+		}
+	}
 
-	txHash, err := eth.HandleOps(context.Background(), abiUOs)
+	txHash, err := eth.HandleOps(ctx, abiUOs)
 	if err != nil {
 		return errorResp(500, fmt.Sprintf("failed to send HandleOps call: %s", err.Error()))
 	}
