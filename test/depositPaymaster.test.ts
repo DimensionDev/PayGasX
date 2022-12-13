@@ -1,5 +1,4 @@
 import { ethers } from "hardhat";
-import "./aa.init";
 
 import {
   DepositPaymaster,
