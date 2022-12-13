@@ -44,6 +44,8 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
 
     EntryPoint private _entryPoint;
 
+    event OwnerChanged(address indexed oldOwner, address indexed newOwner);
+
     event EntryPointChanged(address indexed oldEntryPoint, address indexed newEntryPoint);
 
     // solhint-disable-next-line no-empty-blocks
@@ -86,7 +88,11 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
         StorageSlot.getAddressSlot(_ADMIN_SLOT).value = newAdmin;
     }
 
+    /**
+     * transfer the ownership to another address
+     */
     function changeOwner(address newOwner) public onlyOwner {
+        emit OwnerChanged(owner(), newOwner);
         _setAdmin(newOwner);
     }
 
