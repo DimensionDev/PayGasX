@@ -33,10 +33,9 @@ export function createWallet(): Wallet {
 
 const numberToBytes32Hex = (number: number): string => hexZeroPad(hexlify(number), 32);
 
-export const create2 = (from: string, salt: number, initCode: BytesLike): string => {
-  const saltBytes32 = numberToBytes32Hex(salt);
+export const create2 = (from: string, salt: string, initCode: BytesLike): string => {
   const initCodeHash = keccak256(initCode);
-  return getCreate2Address(from, saltBytes32, initCodeHash);
+  return getCreate2Address(from, salt, initCodeHash);
 };
 
 const encode = (typeValues: Array<{ type: string; val: any }>, forSignature: boolean): string => {
@@ -161,7 +160,7 @@ export const signUserOp = (
 
 //TODO: refactor getContractWalletInfo & getProxyWalletInfo (combine them)
 export const getContractWalletInfo = async (
-  simpleWalletCreateSalt: number,
+  simpleWalletCreateSalt: number | string,
   entryPointAddress: string,
   gasToken: string,
   paymaster: string,
@@ -169,6 +168,9 @@ export const getContractWalletInfo = async (
   ownerAddress: string,
   walletFactoryAddress: string,
 ): Promise<ContractWalletInfo> => {
+  if (typeof simpleWalletCreateSalt == "number") {
+    simpleWalletCreateSalt = numberToBytes32Hex(simpleWalletCreateSalt);
+  }
   let contractFactory = await ethers.getContractFactory("SimpleWallet");
   let initCode = contractFactory.getDeployTransaction(
     entryPointAddress,
@@ -186,12 +188,15 @@ export const getContractWalletInfo = async (
 };
 
 export const getProxyWalletInfo = async (
-  simpleWalletCreateSalt: number,
+  simpleWalletCreateSalt: number | string,
   walletLogicAddress: string,
   initializeData: string,
   ownerAddress: string,
   walletFactoryAddress: string,
 ): Promise<ContractWalletInfo> => {
+  if (typeof simpleWalletCreateSalt == "number") {
+    simpleWalletCreateSalt = numberToBytes32Hex(simpleWalletCreateSalt);
+  }
   let contractFactory = await ethers.getContractFactory("WalletProxy");
   let initCode = contractFactory.getDeployTransaction(ownerAddress, walletLogicAddress, initializeData).data;
   if (!initCode) throw new Error("node data");

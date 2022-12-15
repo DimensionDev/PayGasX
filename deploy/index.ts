@@ -59,11 +59,13 @@ async function main() {
     console.log("presetFactory address:", presetFactory.address);
 
     presetFactoryAddress = presetFactory.address;
-  }
 
-  // give admin permission to deposit paymaster
-  const depositPaymaster = await (await ethers.getContractFactory("DepositPaymaster")).attach(depositPaymasterAddress);
-  await depositPaymaster.connect(deployer).adjustAdmin(presetFactoryAddress, true);
+    // give admin permission to deposit paymaster
+    const depositPaymaster = await (
+      await ethers.getContractFactory("DepositPaymaster")
+    ).attach(depositPaymasterAddress);
+    await depositPaymaster.connect(deployer).adjustAdmin(presetFactoryAddress, true);
+  }
 
   // deploy verify paymaster
   let verifyPaymasterAddress;

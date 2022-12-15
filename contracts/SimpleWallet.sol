@@ -7,6 +7,7 @@ import "./lib/ECDSA.sol";
 import "./lib/UserOperation.sol";
 import "./EntryPoint.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@gnosis.pm/safe-contracts/contracts/handler/DefaultCallbackHandler.sol";
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
@@ -18,7 +19,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  *  has a single signer that can send requests through the entryPoint.
  */
 
-contract SimpleWallet is BaseWallet {
+contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
     using ECDSA for bytes32;
     using UserOperationLib for UserOperation;
 
@@ -35,6 +36,8 @@ contract SimpleWallet is BaseWallet {
     }
 
     EntryPoint private _entryPoint;
+
+    event OwnerChanged(address indexed oldOwner, address indexed newOwner);
 
     event EntryPointChanged(address indexed oldEntryPoint, address indexed newEntryPoint);
 
@@ -61,6 +64,14 @@ contract SimpleWallet is BaseWallet {
     function _onlyOwner() internal view {
         //directly from EOA owner, or through the entryPoint (which gets redirected through execFromEntryPoint)
         require(msg.sender == owner || msg.sender == address(this), "only owner");
+    }
+
+    /**
+     * transfer the ownership to another address
+     */
+    function changeOwner(address newOwner) public onlyOwner {
+        emit OwnerChanged(owner, newOwner);
+        owner = newOwner;
     }
 
     /**
