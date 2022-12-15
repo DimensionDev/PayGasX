@@ -1,5 +1,5 @@
-import { Signer, Wallet } from "ethers";
-import { arrayify, hexZeroPad, parseEther, parseUnits } from "ethers/lib/utils";
+import { Contract, Signer, Wallet } from "ethers";
+import { arrayify, hexlify, hexZeroPad, parseEther, parseUnits } from "ethers/lib/utils";
 import fs from "fs/promises";
 import { ethers, network } from "hardhat";
 import path from "path";
@@ -16,7 +16,7 @@ import {
   unstakeDelaySec,
 } from "./test/constants";
 import { UserOperation } from "./test/entity/userOperation";
-import { createWallet, deployWallet, signUserOp } from "./test/utils";
+import { createWallet, getProxyWalletInfo, signUserOp } from "./test/utils";
 import {
   DepositPaymaster,
   DepositPaymaster__factory,
@@ -27,6 +27,7 @@ import {
   MaskToken,
   MaskToken__factory,
   SimpleWalletUpgradeable,
+  SimpleWalletUpgradeable__factory,
   SingletonFactory,
   SingletonFactory__factory,
   TESTNFT,
@@ -58,6 +59,7 @@ let walletOwner: Wallet;
 let entryPoint: EntryPoint;
 let paymaster: DepositPaymaster;
 let contractWallet: SimpleWalletUpgradeable;
+let walletImp: SimpleWalletUpgradeable;
 let redPacket: HappyRedPacket;
 
 async function main() {
@@ -66,11 +68,14 @@ async function main() {
   const eoaGasResult = await getEOAGasResult();
   const scWalletGasResult = await get4337WalletGasResultWithoutEP();
   const scWalletGasResultWithEP = await get4337WalletGasResultWithEP();
+  const scWalletGasWithEPDeployment = await get4337GasWithEPDeployment();
   const scWalletRPResultWithPaymaster = await getRedpacket4337GasWithPaymaster();
   const eoaRPResult = await getRPEoaResult();
   let replaced = replace(
     content,
-    Array.from(makeTable(eoaGasResult, scWalletGasResult, scWalletGasResultWithEP)).filter(Boolean).join("\n"),
+    Array.from(makeTable(eoaGasResult, scWalletGasResult, scWalletGasResultWithEP, scWalletGasWithEPDeployment))
+      .filter(Boolean)
+      .join("\n"),
     "Wallet",
   );
   replaced = replace(
@@ -88,13 +93,18 @@ async function main() {
 
 main();
 
-function* makeTable(eoaGasResult: GasResult, scWalletGasResult: GasResult, scWalletGasResultWithEP: GasResult) {
-  yield "|  | EOA Wallet | 4337 Wallet without EP | 4337 Wallet with EP |";
-  yield "| - | :-: | :-: | :-: |";
-  yield `| Transfer ETH | ${eoaGasResult.TransferEther}| ${scWalletGasResult.TransferEther} | ${scWalletGasResultWithEP.TransferEther} |`;
-  yield `| Approve ERC20 | ${eoaGasResult.Approve}| ${scWalletGasResult.Approve} | ${scWalletGasResultWithEP.Approve} |`;
-  yield `| Transfer ERC20 | ${eoaGasResult.ERC20Transfer}| ${scWalletGasResult.ERC20Transfer} | ${scWalletGasResultWithEP.ERC20Transfer} |`;
-  yield `| Mint ERC721 | ${eoaGasResult.ERC721Mint}| ${scWalletGasResult.ERC721Mint} | ${scWalletGasResultWithEP.ERC721Mint} |`;
+function* makeTable(
+  eoaGasResult: GasResult,
+  scWalletGasResult: GasResult,
+  scWalletGasResultWithEP: GasResult,
+  scWalletGasWithEPDeployment: GasResult,
+) {
+  yield "|  | EOA Wallet | 4337 Wallet without EP | 4337 Wallet with EP | 4337 Wallet with EP Deploy Wallet* |";
+  yield "| - | :-: | :-: | :-: | :-: |";
+  yield `| Transfer ETH | ${eoaGasResult.TransferEther}| ${scWalletGasResult.TransferEther} | ${scWalletGasResultWithEP.TransferEther} | ${scWalletGasWithEPDeployment.TransferEther} |`;
+  yield `| Approve ERC20 | ${eoaGasResult.Approve}| ${scWalletGasResult.Approve} | ${scWalletGasResultWithEP.Approve} | ${scWalletGasWithEPDeployment.Approve} |`;
+  yield `| Transfer ERC20 | ${eoaGasResult.ERC20Transfer}| ${scWalletGasResult.ERC20Transfer} | ${scWalletGasResultWithEP.ERC20Transfer} | ${scWalletGasWithEPDeployment.ERC20Transfer} |`;
+  yield `| Mint ERC721 | ${eoaGasResult.ERC721Mint}| ${scWalletGasResult.ERC721Mint} | ${scWalletGasResultWithEP.ERC721Mint} | ${scWalletGasWithEPDeployment.ERC721Mint} |`;
 }
 
 function* makeRPTable(eoaGasResult: RPGasResult, scWalletGasResultWithPaymaster: RPGasResult) {
@@ -225,6 +235,124 @@ async function get4337WalletGasResultWithEP(): Promise<GasResult> {
     ERC721Mint: mintReceipt.gasUsed.toString(),
   };
 }
+async function get4337GasWithEPDeployment(): Promise<GasResult> {
+  const beneficiaryAddress = await sponsor.getAddress();
+  let createWalletSalt = 0;
+
+  //#region transferEth via EntryPoint
+  const initializeData = walletImp.interface.encodeFunctionData("initialize", [
+    entryPoint.address,
+    walletOwner.address,
+    AddressZero,
+    AddressZero,
+    0,
+  ]);
+  // WalletProxy constructor
+  const proxyWalletInfo = await getProxyWalletInfo(
+    createWalletSalt,
+    walletImp.address,
+    initializeData,
+    walletOwner.address,
+    walletFactory.address,
+  );
+  sponsor.sendTransaction({
+    to: proxyWalletInfo.address,
+    value: ONE_ETH,
+  });
+  await entryPoint.connect(sponsor).depositTo(proxyWalletInfo.address, { value: ONE_ETH });
+  let transferEthUserOp = createDefaultUserOp(proxyWalletInfo.address);
+  transferEthUserOp.nonce = createWalletSalt;
+  transferEthUserOp.initCode = proxyWalletInfo.initCode;
+  transferEthUserOp.callData = walletImp.interface.encodeFunctionData("execFromEntryPoint", [
+    createWallet().address,
+    ONE_ETH,
+    "0x",
+  ]);
+  await transferEthUserOp.estimateGas(ethers.provider, entryPoint.address);
+  transferEthUserOp.signature = signUserOp(transferEthUserOp, entryPoint.address, chainId, walletOwner.privateKey);
+  const transferEthTx = await entryPoint.connect(sponsor).handleOps([transferEthUserOp], beneficiaryAddress);
+  const transferEthReceipt = await ethers.provider.getTransactionReceipt(transferEthTx.hash);
+  createWalletSalt++;
+  //#endregion
+
+  //#region approve ERC20 via EntryPoint
+  const proxyWalletInfo1 = await getProxyWalletInfo(
+    createWalletSalt,
+    walletImp.address,
+    initializeData,
+    walletOwner.address,
+    walletFactory.address,
+  );
+  await entryPoint.connect(sponsor).depositTo(proxyWalletInfo1.address, { value: ONE_ETH });
+  let approveUserOp = createDefaultUserOp(proxyWalletInfo1.address);
+  approveUserOp.nonce = createWalletSalt;
+  approveUserOp.initCode = proxyWalletInfo1.initCode;
+  const execApprove = maskToken.interface.encodeFunctionData("approve", [paymaster.address, MaxUint256]);
+  approveUserOp.callData = walletImp.interface.encodeFunctionData("execFromEntryPoint", [
+    maskToken.address,
+    0,
+    execApprove,
+  ]);
+  await approveUserOp.estimateGas(ethers.provider, entryPoint.address);
+  approveUserOp.signature = signUserOp(approveUserOp, entryPoint.address, chainId, walletOwner.privateKey);
+  const approveTx = await entryPoint.connect(sponsor).handleOps([approveUserOp], beneficiaryAddress);
+  const approveReceipt = await ethers.provider.getTransactionReceipt(approveTx.hash);
+  createWalletSalt++;
+  //#endregion
+
+  //#region transfer ERC20 via EntryPoint
+  const proxyWalletInfo2 = await getProxyWalletInfo(
+    createWalletSalt,
+    walletImp.address,
+    initializeData,
+    walletOwner.address,
+    walletFactory.address,
+  );
+  await entryPoint.connect(sponsor).depositTo(proxyWalletInfo2.address, { value: ONE_ETH });
+  await maskToken.connect(ethersSigner).transfer(proxyWalletInfo2.address, TWO_ETH);
+  let transfer20UserOp = createDefaultUserOp(proxyWalletInfo2.address);
+  transfer20UserOp.nonce = createWalletSalt;
+  transfer20UserOp.initCode = proxyWalletInfo2.initCode;
+  const execTransfer = maskToken.interface.encodeFunctionData("transfer", [createWallet().address, ONE_ETH]);
+  transfer20UserOp.callData = walletImp.interface.encodeFunctionData("execFromEntryPoint", [
+    maskToken.address,
+    0,
+    execTransfer,
+  ]);
+  await transfer20UserOp.estimateGas(ethers.provider, entryPoint.address);
+  transfer20UserOp.signature = signUserOp(transfer20UserOp, entryPoint.address, chainId, walletOwner.privateKey);
+  const transfer20Tx = await entryPoint.connect(sponsor).handleOps([transfer20UserOp], beneficiaryAddress);
+  const transfer20Receipt = await ethers.provider.getTransactionReceipt(transfer20Tx.hash);
+  createWalletSalt++;
+  //#endregion
+
+  //#region mint ERC721 via EntryPoint
+  const proxyWalletInfo3 = await getProxyWalletInfo(
+    createWalletSalt,
+    walletImp.address,
+    initializeData,
+    walletOwner.address,
+    walletFactory.address,
+  );
+  await entryPoint.connect(sponsor).depositTo(proxyWalletInfo3.address, { value: ONE_ETH });
+  let mintUserOp = createDefaultUserOp(proxyWalletInfo3.address);
+  mintUserOp.nonce = createWalletSalt;
+  mintUserOp.initCode = proxyWalletInfo3.initCode;
+  const execMint = testNft.interface.encodeFunctionData("mint", [createWallet().address, 3]);
+  mintUserOp.callData = walletImp.interface.encodeFunctionData("execFromEntryPoint", [testNft.address, 0, execMint]);
+  await mintUserOp.estimateGas(ethers.provider, entryPoint.address);
+  mintUserOp.signature = signUserOp(mintUserOp, entryPoint.address, chainId, walletOwner.privateKey);
+  const mintTx = await entryPoint.connect(sponsor).handleOps([mintUserOp], beneficiaryAddress);
+  const mintReceipt = await ethers.provider.getTransactionReceipt(mintTx.hash);
+  //#endregion
+
+  return {
+    TransferEther: transferEthReceipt.gasUsed.toString(),
+    Approve: approveReceipt.gasUsed.toString(),
+    ERC20Transfer: transfer20Receipt.gasUsed.toString(),
+    ERC721Mint: mintReceipt.gasUsed.toString(),
+  };
+}
 
 async function setUp() {
   const signers = await ethers.getSigners();
@@ -241,24 +369,41 @@ async function setUp() {
     paymasterStake,
     unstakeDelaySec,
   );
-
   paymaster = await new DepositPaymaster__factory(ethersSigner).deploy(entryPoint.address, maskToken.address);
-  await paymaster.addStake(0, { value: parseEther("2") });
-  await entryPoint.depositTo(paymaster.address, { value: parseEther("1") });
-  await maskToken.connect(ethersSigner).approve(paymaster.address, ethers.constants.MaxUint256);
 
-  contractWallet = await deployWallet(
+  walletImp = await new SimpleWalletUpgradeable__factory(ethersSigner).deploy();
+  const initializeData = walletImp.interface.encodeFunctionData("initialize", [
     entryPoint.address,
     walletOwner.address,
     maskToken.address,
     paymaster.address,
-    parseEther("1"),
+    MaxUint256,
+  ]);
+  // WalletProxy constructor
+  const proxyWalletInfo = await getProxyWalletInfo(
+    0,
+    walletImp.address,
+    initializeData,
+    walletOwner.address,
+    walletFactory.address,
   );
 
-  await paymaster.addDepositFor(contractWallet.address, FIVE_ETH);
+  await walletFactory.deploy(proxyWalletInfo.initCode, hexZeroPad(hexlify(0), 32));
+  contractWallet = new Contract(
+    proxyWalletInfo.address,
+    walletImp.interface,
+    ethers.provider,
+  ) as SimpleWalletUpgradeable;
+
+  await paymaster.addStake(0, { value: parseEther("2") });
+  await entryPoint.depositTo(paymaster.address, { value: parseEther("1") });
+  await maskToken.connect(ethersSigner).approve(paymaster.address, ethers.constants.MaxUint256);
+
+  await paymaster.connect(ethersSigner).adjustAdmin(await ethersSigner.getAddress(), true);
+  await paymaster.connect(ethersSigner).addDepositFor(contractWallet.address, FIVE_ETH);
 
   await maskToken.connect(ethersSigner).transfer(contractWallet.address, FIVE_ETH);
-  await paymaster.setMaskToEthRadio(2000);
+  await paymaster.setMaskToMaticRatio([1, 4]);
 
   await ethersSigner.sendTransaction({
     to: contractWallet.address,
