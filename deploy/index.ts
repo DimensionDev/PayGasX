@@ -52,8 +52,8 @@ async function main() {
       depositPaymasterAddress,
       deployer.address,
       maskTokenAddress,
-      ethers.utils.parseEther("5"),
-      ethers.utils.parseEther("5"),
+      ethers.utils.parseEther("1"),
+      ethers.utils.parseEther("1"),
     );
     await presetFactory.deployed();
     console.log("presetFactory address:", presetFactory.address);
