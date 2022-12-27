@@ -47,13 +47,20 @@ You could run the following command to generate gas report automatically.
 | Chain        | MaskToken                       | EntryPoint                      | DepositPaymaster                 | VerifyingPaymaster               | WalletLogic                     | PresetFactory                   |
 | ------------ | ------------------------------- | ------------------------------- | -------------------------------- | -------------------------------- | ------------------------------- | ------------------------------- |
 | matic_mumbai | [`0xF8935Df6`][mt-matic_mumbai] | [`0x8A42F700`][ep-matic_mumbai] | [`0x808c7f48`][dpm-matic_mumbai] | [`0xB349AC5E`][vpm-matic_mumbai] | [`0x0912FD4D`][wl-matic_mumbai] | [`0x72C51052`][pf-matic_mumbai] |
+| matic        | [`0x2b9e7ccd`][mt-matic]        | [`0x43B87595`][ep-matic]        | [`0x5592E365`][dpm-matic]        | [`0x540dcAc6`][vpm-matic]        | [`0xE74351cA`][wl-matic]        | [`0xd57E8156`][pf-matic]        |
 
 [mt-matic_mumbai]: https://mumbai.polygonscan.com/address/0xF8935Df67cAB7BfcA9532D1Ac2088C5c39b995b5
+[mt-matic]: https://polygonscan.com/address/0x2b9e7ccdf0f4e5b24757c1e1a80e311e34cb10c7
 [ep-matic_mumbai]: https://mumbai.polygonscan.com/address/0x8A42F70047a99298822dD1dbA34b454fc49913F2
+[ep-matic]: https://polygonscan.com/address/0x43B87595F319B17F3386Ac244A00944B3f5A532A
 [dpm-matic_mumbai]: https://mumbai.polygonscan.com/address/0x808c7f48a64404e4e97d9b62b21f13F984fF1a96
+[dpm-matic]: https://polygonscan.com/address/0x5592E365EA2998721b9301eDB26F883CC08EE690
 [vpm-matic_mumbai]: https://mumbai.polygonscan.com/address/0xB349AC5E5C037C2ecb2AE9fCDc8F122b5f384620
+[vpm-matic]: https://polygonscan.com/address/0x540dcAc69cfFD35e2afDDdf610Ba8E7b2A917E6E
 [wl-matic_mumbai]: https://mumbai.polygonscan.com/address/0x0912FD4D5bA43C5583B1796bb17586080cb117D3
+[wl-matic]: https://polygonscan.com/address/0xE74351cA4d11659Be8Fab0054d14f6a417a25703
 [pf-matic_mumbai]: https://mumbai.polygonscan.com/address/0x72C510523797653d286fD268e06226C5a1F1051b
+[pf-matic]: https://polygonscan.com/address/0xd57E81560615E55f4Cd1A35d5676b25EC1b27359
 
 <!-- end PayGasX -->
 
