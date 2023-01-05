@@ -1,6 +1,6 @@
 {
   "extends": "solhint:default",
-  "plugins": ["prettier"],
+  "plugins": ["prettier", "avoid-console"],
   "rules": {
     "func-visibility": ["warn", { "ignoreConstructors": true }],
     "code-complexity": ["warn", 7],
@@ -9,10 +9,10 @@
     "event-name-camelcase": "warn",
     "const-name-snakecase": "warn",
     "func-name-mixedcase": "warn",
-    "var-name-mixedcase": "warn",
     "func-order": "warn",
     "avoid-call-value": "warn",
     "reentrancy": "error",
-    "state-visibility": "warn"
+    "state-visibility": "warn",
+    "avoid-console/no-console-log": "error"
   }
 }
