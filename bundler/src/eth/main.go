@@ -84,6 +84,7 @@ func HandleOps(ctx context.Context, ops []abi.UserOperation) (txHash string, err
 		return "", xerrors.Errorf("Failed to create transactor for bundler: %w", err)
 	}
 	transactOps.Context = ctx
+	transactOps.GasLimit *= 2 // FIXME: sometimes estimated gas is wrong.
 
 	tx, err := entrypoint.HandleOps(transactOps, ops, config.GetBundlerAddress())
 	if err != nil {
