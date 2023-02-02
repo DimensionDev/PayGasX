@@ -1,4 +1,5 @@
 //SPDX-License-Identifier: MIT
+pragma solidity ^0.8.12;
 
 import "./BasePaymaster.sol";
 import "./lib/UserOperation.sol";
@@ -8,7 +9,7 @@ contract NativeTokenPaymaster is BasePaymaster {
     using UserOperationLib for UserOperation;
 
     //calculated cost of the postOp TODO: get the correct cost;
-    uint256 public constant COST_OF_POST = 35000;
+    uint256 public constant COST_OF_POST = 20000;
 
     mapping(address => uint256) public credits;
     mapping(address => bool) public isAdmin;
@@ -33,6 +34,13 @@ contract NativeTokenPaymaster is BasePaymaster {
         isAdmin[account] = admin;
     }
 
+    //TODO: whether to use receive() or an additional function
+    function depositToEP(uint256 amount) external payable onlyOwner {
+        if (amount >= address(this).balance) amount = address(this).balance;
+        // payable(address(entryPoint)).call{value: msg.value}("");
+        entryPoint.depositTo{value: amount}(address(this));
+    }
+
     function validatePaymasterUserOp(
         UserOperation calldata userOp,
         bytes32 requestId,
@@ -40,7 +48,7 @@ contract NativeTokenPaymaster is BasePaymaster {
     ) external view override returns (bytes memory context) {
         (requestId);
 
-        require(userOp.verificationGas > COST_OF_POST, "DepositPaymaster: gas too low for postOp");
+        require(userOp.verificationGas > COST_OF_POST, "Paymaster: gas too low for postOp");
         address sender = userOp.getSender();
         uint256 accountBalance = sender.balance;
         require(IWallet(sender)._paymaster() == address(this), "Paymaster: not registered in sender account");
@@ -55,7 +63,7 @@ contract NativeTokenPaymaster is BasePaymaster {
      * @param target token recipient
      * @param amount amount to withdraw
      */
-    function withdraw(address payable target, uint256 amount) public onlyOwner {
+    function withdrawBalance(address payable target, uint256 amount) public onlyOwner {
         if (amount >= address(this).balance) amount = address(this).balance;
         target.transfer(amount);
     }
@@ -78,7 +86,5 @@ contract NativeTokenPaymaster is BasePaymaster {
         }
     }
 
-    receive() external payable {
-        entryPoint.depositTo{value: msg.value}(address(this));
-    }
+    receive() external payable {}
 }
