@@ -134,7 +134,7 @@ describe("Wallet testing", () => {
         entryPoint.address,
         deployerAddress,
         maskToken.address,
-        beneficialAccountAddress,
+        beneficialAccountAddress, // using a signer to simulate paymaster action
         ONE_ETH,
       );
     });
@@ -152,6 +152,9 @@ describe("Wallet testing", () => {
         value: TWO_ETH,
       });
       expect(await ethers.provider.getBalance(testSimpleWallet.address)).to.eq(TWO_ETH);
+      await expect(testSimpleWallet.connect(sponsorSigner).transfer(userAddress, ONE_ETH)).to.be.revertedWith(
+        "not owner or paymaster",
+      );
       await testSimpleWallet.connect(beneficialAccount).transfer(userAddress, ONE_ETH);
       expect(await ethers.provider.getBalance(userAddress)).to.eq(ONE_ETH);
       const randomAddress = Wallet.createRandom().address;
@@ -296,6 +299,39 @@ describe("Wallet testing", () => {
       }
     });
 
+    it("test deploy and send tx in the same tx", async () => {
+      await maskToken.transfer(walletProxyAddress, TWO_ETH);
+      let userOperation: UserOperation = createDefaultUserOp(walletProxyAddress);
+      userOperation.nonce = salt; // should match salt value if deploying through EP
+      userOperation.paymaster = depositPaymaster.address;
+      userOperation.paymasterData = utils.hexZeroPad(maskToken.address, 32);
+      const transferData = maskToken.interface.encodeFunctionData("transfer", [sponsorAddress, ONE_ETH]);
+      userOperation.callData = simpleWalletInterface.encodeFunctionData("execFromEntryPoint", [
+        maskToken.address,
+        0,
+        transferData,
+      ]);
+      await userOperation.estimateGas(ethers.provider, entryPoint.address);
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+      await expect(entryPointStatic.callStatic.simulateValidation(userOperation)).to.be.reverted; // wallet not deployed
+
+      userOperation.initCode = walletProxyInitCode;
+      await userOperation.estimateGas(ethers.provider, entryPoint.address);
+      userOperation.callGas = BigNumber.from(2).mul(userOperation.callGas);
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+      try {
+        const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
+        if (result) {
+          const sponsorInitialBal = await maskToken.balanceOf(sponsorAddress);
+          await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+          expect(await maskToken.balanceOf(sponsorAddress)).to.eq(sponsorInitialBal.add(ONE_ETH));
+        }
+      } catch (error) {
+        console.error(error);
+        throw new Error("Simulation error");
+      }
+    });
+
     it("normal workflow", async () => {
       let userOp1 = createDefaultUserOp(walletLogic.address);
       userOp1.paymaster = verifyingPaymaster.address;
@@ -344,39 +380,6 @@ describe("Wallet testing", () => {
               constants.MaxUint256,
             );
           }
-        }
-      } catch (error) {
-        console.error(error);
-        throw new Error("Simulation error");
-      }
-    });
-
-    it("test deploy and send tx in the same tx", async () => {
-      await maskToken.transfer(walletProxyAddress, TWO_ETH);
-      let userOperation: UserOperation = createDefaultUserOp(walletProxyAddress);
-      userOperation.nonce = salt; // should match salt value if deploying through EP
-      userOperation.paymaster = depositPaymaster.address;
-      userOperation.paymasterData = utils.hexZeroPad(maskToken.address, 32);
-      const transferData = maskToken.interface.encodeFunctionData("transfer", [sponsorAddress, ONE_ETH]);
-      userOperation.callData = simpleWalletInterface.encodeFunctionData("execFromEntryPoint", [
-        maskToken.address,
-        0,
-        transferData,
-      ]);
-      await userOperation.estimateGas(ethers.provider, entryPoint.address);
-      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-      await expect(entryPointStatic.callStatic.simulateValidation(userOperation)).to.be.reverted; // wallet not deployed
-
-      userOperation.initCode = walletProxyInitCode;
-      await userOperation.estimateGas(ethers.provider, entryPoint.address);
-      userOperation.callGas = BigNumber.from(2).mul(userOperation.callGas);
-      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
-      try {
-        const result = await entryPointStatic.callStatic.simulateValidation(userOperation);
-        if (result) {
-          const sponsorInitialBal = await maskToken.balanceOf(sponsorAddress);
-          await entryPoint.handleOps([userOperation], beneficialAccountAddress);
-          expect(await maskToken.balanceOf(sponsorAddress)).to.eq(sponsorInitialBal.add(ONE_ETH));
         }
       } catch (error) {
         console.error(error);
