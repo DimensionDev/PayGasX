@@ -16,6 +16,7 @@ import {
   TESTNFT__factory,
   VerifyingPaymaster,
   VerifyingPaymaster__factory,
+  WalletProxy,
   WalletProxy__factory,
 } from "../types";
 import { SimpleWalletUpgradeableInterface } from "../types/contracts/SimpleWalletUpgradeable";
@@ -63,8 +64,8 @@ describe("Wallet testing", () => {
     userAddress = await userSigner.getAddress();
     [deployer, beneficialAccount, sponsorSigner] = await ethers.getSigners();
     deployerAddress = await deployer.getAddress();
-    sponsorAddress = await sponsorSigner.getAddress();
     beneficialAccountAddress = await beneficialAccount.getAddress();
+    sponsorAddress = await sponsorSigner.getAddress();
 
     maskToken = await new MaskToken__factory(deployer).deploy();
     walletImp = await new SimpleWalletUpgradeable__factory(deployer).deploy();
@@ -118,19 +119,12 @@ describe("Wallet testing", () => {
   });
 
   describe("test wallet basic logics", async () => {
-    it("can receive erc721 assets", async () => {
-      const testNft = await new TESTNFT__factory(deployer).deploy();
-      await testNft.connect(deployer).mint(walletProxyAddress, 0);
-      expect(await testNft.ownerOf(0)).eq(walletProxyAddress);
-    });
+    let testProxy: WalletProxy;
+    let testSimpleWallet: SimpleWalletUpgradeable;
 
-    it("test initialization/upgradeability with ownership", async () => {
-      const testProxy = await new WalletProxy__factory(deployer).deploy(
-        await deployer.getAddress(),
-        walletImp.address,
-        "0x",
-      );
-      const testSimpleWallet = new ethers.Contract(
+    before(async () => {
+      testProxy = await new WalletProxy__factory(deployer).deploy(await deployer.getAddress(), walletImp.address, "0x");
+      testSimpleWallet = new ethers.Contract(
         testProxy.address,
         SimpleWalletUpgradeable__factory.abi,
         deployer,
@@ -140,11 +134,35 @@ describe("Wallet testing", () => {
         entryPoint.address,
         deployerAddress,
         maskToken.address,
-        entryPoint.address,
+        beneficialAccountAddress,
         ONE_ETH,
       );
+    });
+
+    it("can receive erc721 assets", async () => {
+      const testNft = await new TESTNFT__factory(deployer).deploy();
+      await testNft.connect(deployer).mint(testSimpleWallet.address, 0);
+      expect(await testNft.ownerOf(0)).eq(testSimpleWallet.address);
+    });
+
+    it("test trusted paymaster", async () => {
+      await deployer.sendTransaction({
+        from: deployerAddress,
+        to: testSimpleWallet.address,
+        value: TWO_ETH,
+      });
+      expect(await ethers.provider.getBalance(testSimpleWallet.address)).to.eq(TWO_ETH);
+      await testSimpleWallet.connect(beneficialAccount).transfer(userAddress, ONE_ETH);
+      expect(await ethers.provider.getBalance(userAddress)).to.eq(ONE_ETH);
+      const randomAddress = Wallet.createRandom().address;
+      await expect(testSimpleWallet.changePaymaster(randomAddress))
+        .to.emit(testSimpleWallet, "PaymasterChanged")
+        .withArgs(beneficialAccountAddress, randomAddress);
+    });
+
+    it("test initialization/upgradeability with ownership", async () => {
       expect(await testSimpleWallet.owner()).to.eq(deployerAddress);
-      expect(await maskToken.allowance(testSimpleWallet.address, entryPoint.address)).to.eq(ONE_ETH);
+      expect(await maskToken.allowance(testSimpleWallet.address, beneficialAccountAddress)).to.eq(ONE_ETH);
       // only using "testSimpleWallet.address" for upgrade testing, could use any address here
       await expect(
         testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
