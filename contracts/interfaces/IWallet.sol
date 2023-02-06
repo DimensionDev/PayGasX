@@ -22,7 +22,7 @@ interface IWallet {
      */
     function validateUserOp(UserOperation calldata userOp, bytes32 requestId, uint256 missingWalletFunds) external;
 
-    function _paymaster() external view returns (address);
+    function nativeTokenPaymaster() external view returns (address);
 
     function transfer(address payable dest, uint256 amount) external;
 }

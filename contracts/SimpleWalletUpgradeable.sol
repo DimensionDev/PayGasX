@@ -43,7 +43,7 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
     }
 
     EntryPoint private _entryPoint;
-    address public _paymaster;
+    address public nativeTokenPaymaster;
 
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
 
@@ -55,17 +55,17 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
     receive() external payable {}
 
     function initialize(
-        EntryPoint anEntryPoint,
-        address anOwner,
-        address gasToken,
-        address paymaster,
-        uint256 amount,
-        address nativeTokenPaymaster
+        EntryPoint _entryPointAddress,
+        address _owner,
+        address _gasToken,
+        address _approveFor,
+        uint256 _amount,
+        address _nativeTokenPaymaster
     ) public initializer {
-        _entryPoint = anEntryPoint;
-        _setAdmin(anOwner);
-        if (gasToken != address(0)) IERC20(gasToken).approve(paymaster, amount);
-        _paymaster = nativeTokenPaymaster;
+        _entryPoint = _entryPointAddress;
+        _setAdmin(_owner);
+        if (_gasToken != address(0)) IERC20(_gasToken).approve(_approveFor, _amount);
+        nativeTokenPaymaster = _nativeTokenPaymaster;
     }
 
     modifier onlyOwner() {
@@ -75,7 +75,7 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
 
     modifier onlyOwnerOrPaymaster() {
         require(
-            msg.sender == owner() || msg.sender == address(this) || msg.sender == _paymaster,
+            msg.sender == owner() || msg.sender == address(this) || msg.sender == nativeTokenPaymaster,
             "not owner or paymaster"
         );
         _;
@@ -113,8 +113,8 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
      * transfer the ownership to another address
      */
     function changePaymaster(address newPaymaster) public onlyOwner {
-        emit PaymasterChanged(_paymaster, newPaymaster);
-        _paymaster = newPaymaster;
+        emit PaymasterChanged(nativeTokenPaymaster, newPaymaster);
+        nativeTokenPaymaster = newPaymaster;
     }
 
     /**

@@ -51,7 +51,7 @@ contract NativeTokenPaymaster is BasePaymaster {
         require(userOp.verificationGas > COST_OF_POST, "Paymaster: gas too low for postOp");
         address sender = userOp.getSender();
         uint256 accountBalance = sender.balance;
-        require(IWallet(sender)._paymaster() == address(this), "Paymaster: not registered in sender account");
+        require(IWallet(sender).nativeTokenPaymaster() == address(this), "Paymaster: not registered in sender account");
         require(accountBalance >= maxCost, "Paymaster: no enough native token");
         require(credits[sender] >= maxCost, "Paymaster: deposit too low");
         return abi.encode(sender, maxCost);

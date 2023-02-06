@@ -26,7 +26,7 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
     //explicit sizes of nonce, to fit a single storage cell with "owner"
     uint96 private _nonce;
     address public owner;
-    address public _paymaster;
+    address public nativeTokenPaymaster;
 
     function nonce() public view virtual override returns (uint256) {
         return _nonce;
@@ -48,17 +48,17 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
     receive() external payable {}
 
     constructor(
-        EntryPoint anEntryPoint,
-        address anOwner,
-        address gasToken,
-        address paymaster,
-        uint256 amount,
-        address nativeTokenPaymaster
+        EntryPoint _entryPointAddress,
+        address _owner,
+        address _gasToken,
+        address _approveFor,
+        uint256 _amount,
+        address _nativeTokenPaymaster
     ) {
-        _entryPoint = anEntryPoint;
-        owner = anOwner;
-        if (gasToken != address(0)) IERC20(gasToken).approve(paymaster, amount);
-        _paymaster = nativeTokenPaymaster;
+        _entryPoint = _entryPointAddress;
+        owner = _owner;
+        if (_gasToken != address(0)) IERC20(_gasToken).approve(_approveFor, _amount);
+        nativeTokenPaymaster = _nativeTokenPaymaster;
     }
 
     modifier onlyOwner() {
@@ -68,7 +68,7 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
 
     modifier onlyOwnerOrPaymaster() {
         require(
-            msg.sender == owner || msg.sender == address(this) || msg.sender == _paymaster,
+            msg.sender == owner || msg.sender == address(this) || msg.sender == nativeTokenPaymaster,
             "not owner or paymaster"
         );
         _;
@@ -91,8 +91,8 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
      * change the trusted paymaster address
      */
     function changePaymaster(address newPaymaster) public onlyOwner {
-        emit PaymasterChanged(_paymaster, newPaymaster);
-        _paymaster = newPaymaster;
+        emit PaymasterChanged(nativeTokenPaymaster, newPaymaster);
+        nativeTokenPaymaster = newPaymaster;
     }
 
     /**
