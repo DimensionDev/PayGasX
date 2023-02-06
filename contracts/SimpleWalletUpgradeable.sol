@@ -59,12 +59,13 @@ contract SimpleWalletUpgradeable is BaseWallet, Initializable, DefaultCallbackHa
         address anOwner,
         address gasToken,
         address paymaster,
-        uint256 amount
+        uint256 amount,
+        address nativeTokenPaymaster
     ) public initializer {
         _entryPoint = anEntryPoint;
         _setAdmin(anOwner);
-        _paymaster = paymaster;
         if (gasToken != address(0)) IERC20(gasToken).approve(paymaster, amount);
+        _paymaster = nativeTokenPaymaster;
     }
 
     modifier onlyOwner() {

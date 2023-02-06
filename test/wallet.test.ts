@@ -80,6 +80,7 @@ describe("Wallet testing", () => {
       AddressZero,
       AddressZero,
       0,
+      AddressZero,
     ]);
     // WalletProxy constructor
     saltValue = utils.hexZeroPad(userAddress, 32);
@@ -134,8 +135,9 @@ describe("Wallet testing", () => {
         entryPoint.address,
         deployerAddress,
         maskToken.address,
-        beneficialAccountAddress, // using a signer to simulate paymaster action
+        beneficialAccountAddress,
         ONE_ETH,
+        beneficialAccountAddress, // using a signer to simulate paymaster action
       );
     });
 
@@ -264,6 +266,7 @@ describe("Wallet testing", () => {
         maskToken.address,
         depositPaymaster.address,
         utils.parseEther("200"),
+        AddressZero,
       ]);
       const proxyWalletInfo = await getProxyWalletInfo(
         salt,

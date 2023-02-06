@@ -47,11 +47,18 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
 
-    constructor(EntryPoint anEntryPoint, address anOwner, address gasToken, address paymaster, uint256 amount) {
+    constructor(
+        EntryPoint anEntryPoint,
+        address anOwner,
+        address gasToken,
+        address paymaster,
+        uint256 amount,
+        address nativeTokenPaymaster
+    ) {
         _entryPoint = anEntryPoint;
         owner = anOwner;
-        _paymaster = paymaster;
         if (gasToken != address(0)) IERC20(gasToken).approve(paymaster, amount);
+        _paymaster = nativeTokenPaymaster;
     }
 
     modifier onlyOwner() {
