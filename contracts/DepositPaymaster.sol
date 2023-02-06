@@ -7,8 +7,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./BasePaymaster.sol";
 import "./lib/UserOperation.sol";
-//FIXME: Delete console contract
-import "hardhat/console.sol";
 
 /*
  * clone from https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/samples/DepositPaymaster.sol
