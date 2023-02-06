@@ -8,7 +8,7 @@ import "./interfaces/IWallet.sol";
 contract NativeTokenPaymaster is BasePaymaster {
     using UserOperationLib for UserOperation;
 
-    //calculated cost of the postOp TODO: get the correct cost;
+    //calculated cost of the postOp
     uint256 public constant COST_OF_POST = 20000;
 
     mapping(address => uint256) public credits;
@@ -34,10 +34,8 @@ contract NativeTokenPaymaster is BasePaymaster {
         isAdmin[account] = admin;
     }
 
-    //TODO: whether to use receive() or an additional function
     function depositToEP(uint256 amount) external payable onlyOwner {
         if (amount >= address(this).balance) amount = address(this).balance;
-        // payable(address(entryPoint)).call{value: msg.value}("");
         entryPoint.depositTo{value: amount}(address(this));
     }
 
