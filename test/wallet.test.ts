@@ -9,6 +9,8 @@ import {
   EntryPoint__factory,
   MaskToken,
   MaskToken__factory,
+  NativeTokenPaymaster__factory,
+  PresetFactory__factory,
   SimpleWalletUpgradeable,
   SimpleWalletUpgradeable__factory,
   SingletonFactory,
@@ -239,18 +241,21 @@ describe("Wallet testing", () => {
   describe("test paymaster", async () => {
     let depositPaymaster: DepositPaymaster;
     let verifyingPaymaster: VerifyingPaymaster;
-    let salt = 0;
     let paymasterSigner: Wallet;
+    let salt = 0;
 
     before(async () => {
       paymasterSigner = createWallet();
       await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
+      // depositPaymaster setup
       depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
       await depositPaymaster.addStake(0, { value: TWO_ETH });
       await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
       await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
       await depositPaymaster.addDepositFor(walletProxyAddress, TWO_ETH);
       await entryPoint.depositTo(depositPaymaster.address, { value: ONE_ETH });
+
+      // verifyingPaymaster setup
       verifyingPaymaster = await new VerifyingPaymaster__factory(deployer).deploy(
         entryPoint.address,
         paymasterSigner.address,
@@ -328,6 +333,74 @@ describe("Wallet testing", () => {
           const sponsorInitialBal = await maskToken.balanceOf(sponsorAddress);
           await entryPoint.handleOps([userOperation], beneficialAccountAddress);
           expect(await maskToken.balanceOf(sponsorAddress)).to.eq(sponsorInitialBal.add(ONE_ETH));
+        }
+      } catch (error) {
+        console.error(error);
+        throw new Error("Simulation error");
+      }
+    });
+
+    it("native token support", async () => {
+      const nativeTokenPaymaster = await new NativeTokenPaymaster__factory(deployer).deploy(entryPoint.address);
+      await nativeTokenPaymaster.addStake(0, { value: utils.parseEther("100") });
+      await nativeTokenPaymaster.depositToEP(utils.parseEther("100"), { value: utils.parseEther("100") });
+
+      const initializeData = simpleWalletInterface.encodeFunctionData("initialize", [
+        entryPoint.address,
+        userAddress,
+        AddressZero,
+        AddressZero,
+        0,
+        nativeTokenPaymaster.address,
+      ]);
+      let walletInfo = await getProxyWalletInfo(
+        0,
+        walletImp.address,
+        initializeData,
+        userAddress,
+        singletonFactory.address,
+      );
+
+      const presetFac = await new PresetFactory__factory(deployer).deploy(
+        depositPaymaster.address,
+        nativeTokenPaymaster.address,
+        deployerAddress,
+        maskToken.address,
+        utils.parseEther("6"),
+        TWO_ETH,
+        TWO_ETH,
+      );
+      await nativeTokenPaymaster.adjustAdmin(presetFac.address, true);
+      await depositPaymaster.adjustAdmin(presetFac.address, true);
+      await maskToken.transfer(presetFac.address, utils.parseEther("1000"));
+      await presetFac.setUpForAccount(walletInfo.address);
+      await deployer.sendTransaction({
+        to: walletInfo.address,
+        value: utils.parseEther("10"),
+      });
+      let userOperation = createDefaultUserOp(walletInfo.address);
+      userOperation.paymaster = nativeTokenPaymaster.address;
+      userOperation.nonce = 0;
+      userOperation.initCode = walletInfo.initCode;
+      const approveData = maskToken.interface.encodeFunctionData("approve", [
+        depositPaymaster.address,
+        constants.MaxUint256,
+      ]);
+      userOperation.callData = simpleWalletInterface.encodeFunctionData("execFromEntryPoint", [
+        maskToken.address,
+        0,
+        approveData,
+      ]);
+      await userOperation.estimateGas(ethers.provider, entryPoint.address);
+      userOperation.signature = signUserOp(userOperation, entryPoint.address, chainId, userPrivateKey);
+
+      try {
+        let result = await entryPointStatic.callStatic.simulateValidation(userOperation);
+        if (result) {
+          await entryPoint.handleOps([userOperation], beneficialAccountAddress);
+          expect(await maskToken.allowance(walletInfo.address, depositPaymaster.address)).to.be.eq(
+            constants.MaxUint256,
+          );
         }
       } catch (error) {
         console.error(error);
