@@ -15,6 +15,7 @@ type DeployedAddressRow = {
   VerifyingPaymaster: string;
   WalletLogic: string;
   PresetFactory: string;
+  NativeTokenPaymaster: string;
 };
 
 async function main() {
@@ -32,7 +33,7 @@ async function main() {
 main();
 
 function* makeTable(rows: DeployedAddressRow[]) {
-  yield "| Chain | MaskToken | EntryPoint | DepositPaymaster | VerifyingPaymaster | WalletLogic | PresetFactory |";
+  yield "| Chain | MaskToken | EntryPoint | DepositPaymaster | VerifyingPaymaster | WalletLogic | PresetFactory | NativeTokenPaymaster |";
   yield "| - | - | - | - | - | - | - |";
   for (const {
     Chain,
@@ -42,6 +43,7 @@ function* makeTable(rows: DeployedAddressRow[]) {
     VerifyingPaymaster,
     WalletLogic,
     PresetFactory,
+    NativeTokenPaymaster,
   } of rows) {
     const mtElement = formElement(MaskToken, `mt-${Chain}`);
     const epElement = formElement(EntryPoint, `ep-${Chain}`);
@@ -49,7 +51,8 @@ function* makeTable(rows: DeployedAddressRow[]) {
     const vpmElement = formElement(VerifyingPaymaster, `vpm-${Chain}`);
     const wtElement = formElement(WalletLogic, `wl-${Chain}`);
     const pfElement = formElement(PresetFactory, `pf-${Chain}`);
-    yield `| ${Chain} | ${mtElement} | ${epElement} | ${dpmElement} | ${vpmElement} | ${wtElement} | ${pfElement} |`;
+    const ntpElement = formElement(NativeTokenPaymaster, `ntp-${Chain}`);
+    yield `| ${Chain} | ${mtElement} | ${epElement} | ${dpmElement} | ${vpmElement} | ${wtElement} | ${pfElement} | ${ntpElement} |`;
   }
   yield "";
   yield* rows.map(({ Chain, MaskToken }) => formLink(MaskToken, Chain, "mt"));
@@ -58,6 +61,7 @@ function* makeTable(rows: DeployedAddressRow[]) {
   yield* rows.map(({ Chain, VerifyingPaymaster }) => formLink(VerifyingPaymaster, Chain, "vpm"));
   yield* rows.map(({ Chain, WalletLogic }) => formLink(WalletLogic, Chain, "wl"));
   yield* rows.map(({ Chain, PresetFactory }) => formLink(PresetFactory, Chain, "pf"));
+  yield* rows.map(({ Chain, NativeTokenPaymaster }) => formLink(NativeTokenPaymaster, Chain, "ntp"));
 }
 
 async function loadDeployedAddressRows(): Promise<DeployedAddressRow[]> {
@@ -70,6 +74,7 @@ async function loadDeployedAddressRows(): Promise<DeployedAddressRow[]> {
     "VerifyingPaymaster",
     "WalletLogic",
     "PresetFactory",
+    "NativeTokenPaymaster",
   ];
   return parse(data, { delimiter: ",", columns, from: 2 });
 }
