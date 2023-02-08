@@ -20,9 +20,9 @@ interface IWallet {
      *      In case there is a paymaster in the request (or the current deposit is high enough),
      *      this value will be zero.
      */
-    function validateUserOp(
-        UserOperation calldata userOp,
-        bytes32 requestId,
-        uint256 missingWalletFunds
-    ) external;
+    function validateUserOp(UserOperation calldata userOp, bytes32 requestId, uint256 missingWalletFunds) external;
+
+    function nativeTokenPaymaster() external view returns (address);
+
+    function transfer(address payable dest, uint256 amount) external;
 }

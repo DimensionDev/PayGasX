@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./BasePaymaster.sol";
 import "./lib/UserOperation.sol";
-import "hardhat/console.sol";
 
 /*
  * clone from https://github.com/eth-infinitism/account-abstraction/blob/develop/contracts/samples/DepositPaymaster.sol
@@ -128,11 +127,7 @@ contract DepositPaymaster is BasePaymaster {
      * this time in *postOpReverted* mode.
      * In this mode, we use the deposit to pay (which we validated to be large enough)
      */
-    function _postOp(
-        PostOpMode mode,
-        bytes calldata context,
-        uint256 actualGasCost
-    ) internal override {
+    function _postOp(PostOpMode mode, bytes calldata context, uint256 actualGasCost) internal override {
         (address account, uint256 maxTokenCost, uint256 maxCost) = abi.decode(context, (address, uint256, uint256));
         //use same conversion rate as used for validation.
         uint256 actualTokenCost = ((actualGasCost + COST_OF_POST) * maxTokenCost) / maxCost;

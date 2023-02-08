@@ -9,6 +9,7 @@ import {
   HappyRedPacket__factory,
   MaskToken,
   MaskToken__factory,
+  NativeTokenPaymaster__factory,
   PresetFactory,
   PresetFactory__factory,
   SimpleWalletUpgradeable,
@@ -20,7 +21,7 @@ import {
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { BigNumberish, Signer, Wallet } from "ethers";
-import { hexZeroPad, Interface, parseEther } from "ethers/lib/utils";
+import { Interface, hexZeroPad, parseEther } from "ethers/lib/utils";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
 import { AddressZero, MaxUint256, paymasterStake, unstakeDelaySec } from "./constants";
 import { revertToSnapShot, takeSnapshot } from "./helper";
@@ -65,11 +66,14 @@ describe("DepositPaymaster", () => {
     maskToken = await new MaskToken__factory(contractCreator).deploy();
     paymaster = await new DepositPaymaster__factory(contractCreator).deploy(entryPoint.address, maskToken.address);
     redPacket = await new HappyRedPacket__factory(contractCreator).deploy();
+    const nativeTokenPaymaster = await new NativeTokenPaymaster__factory(contractCreator).deploy(entryPoint.address);
     presetFac = await new PresetFactory__factory(contractCreator).deploy(
       paymaster.address,
+      nativeTokenPaymaster.address,
       serverAddress,
       maskToken.address,
       parseEther("6"),
+      2e15,
       2e15,
     );
     walletLogic = await new SimpleWalletUpgradeable__factory(contractCreator).deploy();

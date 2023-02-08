@@ -26,6 +26,7 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
     //explicit sizes of nonce, to fit a single storage cell with "owner"
     uint96 private _nonce;
     address public owner;
+    address public nativeTokenPaymaster;
 
     function nonce() public view virtual override returns (uint256) {
         return _nonce;
@@ -39,25 +40,37 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
 
     event OwnerChanged(address indexed oldOwner, address indexed newOwner);
 
+    event PaymasterChanged(address indexed oldPaymaster, address indexed newPaymaster);
+
     event EntryPointChanged(address indexed oldEntryPoint, address indexed newEntryPoint);
 
     // solhint-disable-next-line no-empty-blocks
     receive() external payable {}
 
     constructor(
-        EntryPoint anEntryPoint,
-        address anOwner,
-        address gasToken,
-        address paymaster,
-        uint256 amount
+        EntryPoint _entryPointAddress,
+        address _owner,
+        address _gasToken,
+        address _approveFor,
+        uint256 _amount,
+        address _nativeTokenPaymaster
     ) {
-        _entryPoint = anEntryPoint;
-        owner = anOwner;
-        if (gasToken != address(0)) IERC20(gasToken).approve(paymaster, amount);
+        _entryPoint = _entryPointAddress;
+        owner = _owner;
+        if (_gasToken != address(0)) IERC20(_gasToken).approve(_approveFor, _amount);
+        nativeTokenPaymaster = _nativeTokenPaymaster;
     }
 
     modifier onlyOwner() {
         _onlyOwner();
+        _;
+    }
+
+    modifier onlyOwnerOrPaymaster() {
+        require(
+            msg.sender == owner || msg.sender == address(this) || msg.sender == nativeTokenPaymaster,
+            "not owner or paymaster"
+        );
         _;
     }
 
@@ -75,20 +88,24 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
     }
 
     /**
+     * change the trusted paymaster address
+     */
+    function changePaymaster(address newPaymaster) public onlyOwner {
+        emit PaymasterChanged(nativeTokenPaymaster, newPaymaster);
+        nativeTokenPaymaster = newPaymaster;
+    }
+
+    /**
      * transfer eth value to a destination address
      */
-    function transfer(address payable dest, uint256 amount) external onlyOwner {
+    function transfer(address payable dest, uint256 amount) external onlyOwnerOrPaymaster {
         dest.transfer(amount);
     }
 
     /**
      * execute a transaction (called directly from owner, not by entryPoint)
      */
-    function exec(
-        address dest,
-        uint256 value,
-        bytes calldata func
-    ) external onlyOwner {
+    function exec(address dest, uint256 value, bytes calldata func) external onlyOwner {
         _call(dest, value, func);
     }
 
@@ -129,11 +146,7 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
     }
 
     // called by entryPoint, only after validateUserOp succeeded.
-    function execFromEntryPoint(
-        address dest,
-        uint256 value,
-        bytes calldata func
-    ) external {
+    function execFromEntryPoint(address dest, uint256 value, bytes calldata func) external {
         _requireFromEntryPoint();
         _call(dest, value, func);
     }
@@ -149,11 +162,7 @@ contract SimpleWallet is BaseWallet, DefaultCallbackHandler {
         require(owner == hash.recover(userOp.signature), "wallet: wrong signature");
     }
 
-    function _call(
-        address target,
-        uint256 value,
-        bytes memory data
-    ) internal {
+    function _call(address target, uint256 value, bytes memory data) internal {
         (bool success, bytes memory result) = target.call{value: value}(data);
         if (!success) {
             assembly {
