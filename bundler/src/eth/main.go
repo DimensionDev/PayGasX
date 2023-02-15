@@ -75,18 +75,35 @@ func Simulate(ctx context.Context, op abi.UserOperation) error {
 
 func HandleOps(ctx context.Context, ops []abi.UserOperation) (txHash string, err error) {
 	// Init contract
-	entrypoint, err := abi.NewEntryPoint(config.GetEntrypointContractAddress(), client)
+	contract := config.GetEntrypointContractAddress()
+	bundler := config.GetBundlerAddress()
+	entrypoint, err := abi.NewEntryPoint(contract, client)
 	if err != nil {
 		return "", err
 	}
-	transactOps, err := bind.NewKeyedTransactorWithChainID(config.GetBundler(), config.GetChainID())
+
+	// Simulate once to get gas usage
+	estimateTxOps, err := bind.NewKeyedTransactorWithChainID(config.GetBundler(), config.GetChainID())
 	if err != nil {
 		return "", xerrors.Errorf("Failed to create transactor for bundler: %w", err)
 	}
-	transactOps.Context = ctx
-	transactOps.GasLimit *= 2 // FIXME: sometimes estimated gas is wrong.
+	estimateTxOps.Context = ctx
+	estimateTxOps.NoSend = true
+	estimateTx, err := entrypoint.HandleOps(estimateTxOps, ops, bundler)
+	if err != nil {
+		return "", err
+	}
 
-	tx, err := entrypoint.HandleOps(transactOps, ops, config.GetBundlerAddress())
+	// Send it
+	txOps, err := bind.NewKeyedTransactorWithChainID(config.GetBundler(), config.GetChainID())
+	if err != nil {
+		return "", xerrors.Errorf("Failed to create transactor for bundler: %w", err)
+	}
+	txOps.Context = ctx
+	txOps.GasLimit = estimateTx.Gas() * 2
+	txOps.NoSend = false
+
+	tx, err := entrypoint.HandleOps(txOps, ops, bundler)
 	if err != nil {
 		return "", err
 	}
