@@ -68,6 +68,7 @@ describe("Create2 address test", () => {
       maskToken.address,
       paymaster.address,
       MaxUint256,
+      AddressZero,
     ]);
     const proxyWalletInfo = await getProxyWalletInfo(
       salt,
@@ -141,6 +142,7 @@ describe("Create2 address test", () => {
       maskToken.address,
       paymaster.address,
       MaxUint256,
+      AddressZero,
     ]);
     const proxyWalletInfo = await getProxyWalletInfo(
       salt,
@@ -179,6 +181,7 @@ describe("Create2 address test", () => {
       maskToken.address,
       paymaster.address,
       MaxUint256,
+      AddressZero,
     ]);
     const proxyWalletInfo = await getProxyWalletInfo(
       salt,

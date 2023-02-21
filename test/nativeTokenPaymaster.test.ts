@@ -81,6 +81,7 @@ describe("Native Token Paymaster", () => {
         AddressZero,
         paymaster.address,
         0,
+        paymaster.address,
       ]);
       walletInfo = await getProxyWalletInfo(
         simpleWalletCreateSalt,
@@ -140,6 +141,7 @@ describe("Native Token Paymaster", () => {
         AddressZero,
         paymaster.address,
         0,
+        paymaster.address,
       ]);
       walletInfo = await getProxyWalletInfo(
         simpleWalletCreateSalt,
@@ -234,6 +236,7 @@ describe("Native Token Paymaster", () => {
           AddressZero,
           paymaster.address,
           0,
+          paymaster.address,
         ]);
         walletInfo = await getProxyWalletInfo(
           simpleWalletCreateSalt,
@@ -339,6 +342,7 @@ describe("Native Token Paymaster", () => {
           AddressZero,
           paymaster.address,
           0,
+          paymaster.address,
         ]);
         walletInfo = await getProxyWalletInfo(
           simpleWalletCreateSalt,
