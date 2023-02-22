@@ -149,6 +149,17 @@ describe("Wallet testing", () => {
       expect(await testNft.ownerOf(0)).eq(testSimpleWallet.address);
     });
 
+    it("test deposit/withdraw", async () => {
+      expect(await testSimpleWallet.getDeposit()).to.eq(BigNumber.from(0));
+      await testSimpleWallet.addDeposit({ value: TWO_ETH });
+      expect(await testSimpleWallet.getDeposit()).to.eq(TWO_ETH);
+      await testSimpleWallet.withdrawDepositTo(deployerAddress, ONE_ETH);
+      expect(await testSimpleWallet.getDeposit()).to.eq(ONE_ETH);
+      await expect(testSimpleWallet.withdrawDepositTo(deployerAddress, TWO_ETH)).to.be.revertedWith(
+        "Withdraw amount too large",
+      );
+    });
+
     it("test trusted paymaster", async () => {
       await deployer.sendTransaction({
         from: deployerAddress,
@@ -170,6 +181,9 @@ describe("Wallet testing", () => {
     it("test initialization/upgradeability with ownership", async () => {
       expect(await testSimpleWallet.owner()).to.eq(deployerAddress);
       expect(await maskToken.allowance(testSimpleWallet.address, beneficialAccountAddress)).to.eq(ONE_ETH);
+      await expect(testSimpleWallet.updateEntryPoint(AddressZero))
+        .to.emit(testSimpleWallet, "EntryPointChanged")
+        .withArgs(entryPoint.address, AddressZero);
       // only using "testSimpleWallet.address" for upgrade testing, could use any address here
       await expect(
         testProxy.connect(beneficialAccount).upgradeToAndCall(testSimpleWallet.address, "0x", false),
@@ -249,6 +263,7 @@ describe("Wallet testing", () => {
       await maskToken.transfer(walletProxyAddress, utils.parseEther("100"));
       // depositPaymaster setup
       depositPaymaster = await new DepositPaymaster__factory(deployer).deploy(entryPoint.address, maskToken.address);
+      await expect(depositPaymaster.withdrawStake(deployerAddress)).to.be.revertedWith("No stake to withdraw");
       await depositPaymaster.addStake(0, { value: TWO_ETH });
       await maskToken.approve(depositPaymaster.address, constants.MaxUint256);
       await depositPaymaster.connect(deployer).adjustAdmin(await deployer.getAddress(), true);
@@ -284,6 +299,23 @@ describe("Wallet testing", () => {
       walletProxyAddress = proxyWalletInfo.address;
       expect((await ethers.provider.getCode(walletProxyAddress)) == "0x").to.be.true;
       await depositPaymaster.addDepositFor(walletProxyAddress, TWO_ETH);
+    });
+
+    it("staking through paymaster", async () => {
+      expect((await entryPoint.getDepositInfo(depositPaymaster.address)).stake).to.be.eq(TWO_ETH);
+      const tempSigner = createWallet();
+      await expect(depositPaymaster.withdrawStake(tempSigner.address)).to.be.revertedWith(
+        "must call unlockStake() first",
+      );
+      await depositPaymaster.unlockStake();
+      await expect(depositPaymaster.unlockStake()).to.be.revertedWith("already unstaking");
+      await expect(depositPaymaster.withdrawStake(tempSigner.address)).to.be.revertedWith(
+        "Stake withdrawal is not due",
+      );
+      await network.provider.send("evm_increaseTime", [20]);
+      await depositPaymaster.withdrawStake(tempSigner.address);
+      expect((await entryPoint.getDepositInfo(depositPaymaster.address)).stake).to.be.eq(BigNumber.from(0));
+      expect(await ethers.provider.getBalance(tempSigner.address)).to.be.eq(TWO_ETH);
     });
 
     it("wallet deployment through EntryPoint", async () => {
