@@ -21,7 +21,7 @@ import {
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { BigNumberish, Signer, Wallet } from "ethers";
-import { Interface, hexZeroPad, parseEther } from "ethers/lib/utils";
+import { hexZeroPad, Interface, parseEther } from "ethers/lib/utils";
 import SimpleWalletArtifact from "../artifacts/contracts/SimpleWalletUpgradeable.sol/SimpleWalletUpgradeable.json";
 import { AddressZero, MaxUint256, paymasterStake, unstakeDelaySec } from "./constants";
 import { revertToSnapShot, takeSnapshot } from "./helper";
@@ -79,6 +79,7 @@ describe("DepositPaymaster", () => {
     walletLogic = await new SimpleWalletUpgradeable__factory(contractCreator).deploy();
 
     await paymaster.connect(contractCreator).adjustAdmin(presetFac.address, true);
+    await nativeTokenPaymaster.connect(contractCreator).adjustAdmin(presetFac.address, true);
     await paymaster.addStake(0, { value: parseEther("1000") });
     await entryPoint.depositTo(paymaster.address, { value: parseEther("1000") });
     await maskToken.connect(contractCreator).transfer(presetFac.address, parseEther("1000"));
@@ -103,6 +104,7 @@ describe("DepositPaymaster", () => {
         maskToken.address,
         paymaster.address,
         MaxUint256,
+        AddressZero,
       ]);
       walletInfo = await getProxyWalletInfo(
         simpleWalletCreateSalt,
@@ -188,6 +190,7 @@ describe("DepositPaymaster", () => {
         maskToken.address,
         paymaster.address,
         MaxUint256,
+        AddressZero,
       ]);
       walletInfo = await getProxyWalletInfo(
         simpleWalletCreateSalt,
@@ -264,6 +267,7 @@ describe("DepositPaymaster", () => {
         maskToken.address,
         paymaster.address,
         MaxUint256,
+        AddressZero,
       ]);
       walletInfo = await getProxyWalletInfo(
         simpleWalletCreateSalt,
@@ -394,6 +398,7 @@ describe("DepositPaymaster", () => {
         maskToken.address,
         paymaster.address,
         MaxUint256,
+        AddressZero,
       ]);
       walletInfo = await getProxyWalletInfo(
         simpleWalletCreateSalt,
@@ -460,6 +465,7 @@ describe("DepositPaymaster", () => {
         maskToken.address,
         paymaster.address,
         MaxUint256,
+        AddressZero,
       ]);
       walletInfo = await getProxyWalletInfo(
         simpleWalletCreateSalt,

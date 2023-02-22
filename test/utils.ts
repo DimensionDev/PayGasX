@@ -167,6 +167,7 @@ export const getContractWalletInfo = async (
   allowance: BigNumberish,
   ownerAddress: string,
   walletFactoryAddress: string,
+  nativeTokenPaymaster: string,
 ): Promise<ContractWalletInfo> => {
   if (typeof simpleWalletCreateSalt == "number") {
     simpleWalletCreateSalt = numberToBytes32Hex(simpleWalletCreateSalt);
@@ -178,6 +179,7 @@ export const getContractWalletInfo = async (
     gasToken,
     paymaster,
     allowance,
+    nativeTokenPaymaster,
   ).data;
   if (!initCode) throw new Error("node data");
   const address = create2(walletFactoryAddress, simpleWalletCreateSalt, initCode);

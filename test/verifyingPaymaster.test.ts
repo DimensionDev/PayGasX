@@ -108,6 +108,7 @@ describe("EntryPoint with Verifying Paymaster", () => {
       parseUnits("1", "ether"),
       walletOwner.address,
       walletFactory.address,
+      AddressZero,
     );
 
     let approveUserOp = createDefaultUserOp(contractWallet.address);
@@ -145,6 +146,7 @@ describe("EntryPoint with Verifying Paymaster", () => {
       parseUnits("1", "ether"),
       walletOwner.address,
       walletFactory.address,
+      AddressZero,
     );
 
     testToken = await new TestToken__factory(contractCreator).deploy();
@@ -179,6 +181,7 @@ describe("EntryPoint with Verifying Paymaster", () => {
       parseUnits("1", "ether"),
       walletOwner.address,
       walletFactory.address,
+      AddressZero,
     );
 
     const recipient = signers[5];
