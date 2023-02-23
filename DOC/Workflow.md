@@ -22,29 +22,37 @@ Transactions can be executed directly by the owner through `exec(address, uint25
 The two methods will achieve the same result.
 ![walletWorkFlow](4337WalletWorkFlow.png)
 
-## Detail of Paymaster
+## Detail of ERC20 Paymaster
+
+There are two main parts in the entire gas fee payment of a `UserOperation` with paymaster sponsor: transaction sender payment and gas fee compensate.
+
+![gasFeeFlow](gasFeeFlow.jpg)
+
+- Bundler sends the transaction to call `EntryPoint` with `UserOperation` and pay for the transaction gas fee.
+- User pays gas fee to paymaster in post-operation stage using the payment supported by the paymaster which is specified in `UserOperation`.
+- `EntryPoint` compensates bundler with the gas fee and reduce the deposit of this paymaster.
+
+To make the entire progress work fine, we should guarantee every participant get paid what they are supposed to. The following is the detail of our solution for ERC20 Paymaster.
 
 According to the [official doc of ERC-4337](https://eips.ethereum.org/EIPS/eip-4337#simulation),
 
 > While simulating `op` validation, the client should make sure that `paymaster.validatePaymasterUserOp` does not access mutable state of any contract except the paymaster itself.
 
-We need some special design for ERC-20 paymaster to avoid violating the condition. Our solution is to use deposit mechanism and also create two paymaster (the two paymasters could be on implementation level or just conception level).
+Paymaster is not able to check the ERC20 token balance of an account before it approves one payment, so we choose to use the deposit mechanism.
 
-Currently, we divided the entire work flow into two main parts: preparation stage and execution stage.
-
-The following workflow diagrams illustrate these two stage in detail.
+To ensure our paymaster could transfer ERC20 token from users' 4337 contract wallet, our 4337 contract wallet will approve the gas token to paymaster during its creation.
 
 ### Preparation Stage
 
-We hope to give user an entirely gas-free procedure, thus, we have a `verifying paymaster` to help gasless user approve their ERC-20 token ($MASK will be the example token in the following sections).
+In our deposit mechanism, ERC20 token paymaster is willing to approve the payment only when user has enough deposit (to pay for the gas fee of this `UserOperation`). Thus, there is an `addDepositFor()` operation before the real execution of a `UserOperation`.
 
-![preparation](preparation.png)
+In our case, we plan to cover the deposit fee for user. For qualified users, we will add the "deposit" (in current stage, it's more like a credit ledger) for them in advance through our API. Then, users with enough deposit is eligible to perform their `UserOperation` via our $MASK paymaster in execution stage.
 
-`Verifying paymaster` could sponsor transaction for qualified users with supported operation. Here, this paymaster will be used in the operations: `approve()`. This operation should be done in advance (especially for first-time user). Here, we must pay attention to the malicious attack targeting our verifying paymaster since we sponsor users for free. Our solution is to parse `callData` in `UserOperation` to ensure it only sponsor the supported operation. Check [data structure of `UserOperation.callData`](callDataField.md)
+#### Future Work
+
+We plan to make `addDepositFor()` public to allow more user participate and have a try on this paymaster in future stage. At that time, users need to add deposit by themselves.
 
 ### Execution Stage
-
-As stated in the former section, we use deposit mechanism. In this mechanism, every SC wallet should have enough deposit balance before execution stage. In our case, we plan to cover the deposit fee for user. For qualified users, we will deposit for them in advance. Then, users with enough deposit balance in our paymaster is eligible to perform their `UserOperation` via our $MASK paymaster.
 
 If the execution is completed successfully, paymaster will call `transferFrom()` in $MASK token contract to transfer $MASK for gas fee directly. If paymaster fail to get paid, they'll decrease the deposit balance instead.
 
@@ -52,7 +60,7 @@ If the execution is completed successfully, paymaster will call `transferFrom()`
 
 In the entire process, user may face three major exceptional condition.
 
-- User does not complete the preparation stage or their deposit is not enough: Our $MASK paymaster will reject to pay for this `UserOperation`.
+- User's deposit is not enough: Our $MASK paymaster will reject to pay for this `UserOperation`.
 
 - User call in `UserOperation` execution is failed: user still have to pay for their failed operation. $MASK paymaster will call $MASK token contract to transfer corresponding token amount from user's contract wallet.
 
